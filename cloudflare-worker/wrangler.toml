@@ -1,0 +1,12 @@
+name = "quickprint-relay"
+main = "src/index.js"
+compatibility_date = "2024-04-01"
+
+[durable_objects]
+bindings = [
+  { name = "PRINT_ROOM", class_name = "PrintRoom" }
+]
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["PrintRoom"]

@@ -1,0 +1,28 @@
+name: Supabase Keep-Alive Heartbeat
+
+on:
+  schedule:
+    # Runs every 3 days at 00:00 UTC to prevent Supabase 7-day inactivity pause
+    - cron: '0 0 */3 * *'
+  workflow_dispatch: # Allows manual trigger anytime from Actions tab
+
+jobs:
+  ping:
+    name: Ping Supabase Project
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send Keepalive Ping to Supabase
+        env:
+          SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY || secrets.VITE_SUPABASE_ANON_KEY }}
+        run: |
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_KEY" ]; then
+            echo "::warning ::Supabase secrets (VITE_SUPABASE_PUBLISHABLE_KEY or VITE_SUPABASE_ANON_KEY) not found in GitHub repository secrets. Heartbeat skipped."
+            exit 0
+          fi
+          echo "Pinging Supabase REST API..."
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "apikey: $SUPABASE_KEY" \
+            -H "Authorization: Bearer $SUPABASE_KEY" \
+            "$SUPABASE_URL/rest/v1/")
+          echo "Supabase responded with HTTP status: $STATUS"
