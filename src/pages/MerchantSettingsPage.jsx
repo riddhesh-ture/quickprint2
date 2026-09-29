@@ -1,5 +1,5 @@
 // src/pages/MerchantSettingsPage.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Container, Typography, Box, Paper, TextField, Button, Grid,
   Alert, Divider, InputAdornment, CircularProgress, Switch, FormControlLabel
@@ -12,15 +12,37 @@ import QrCode2Icon from '@mui/icons-material/QrCode2';
 import DownloadIcon from '@mui/icons-material/Download';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import { useAuth } from '../hooks/useAuth';
-import { doc, updateDoc } from 'firebase/firestore';
-import { db } from '../firebase/firestore';
+import { upsertMerchantProfile } from '../supabase/db';
 
 export default function MerchantSettingsPage() {
   const { user, userData, loading } = useAuth();
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [validationError, setValidationError] = useState(null);
   const [copied, setCopied] = useState(false);
+  const [copiedCode, setCopiedCode] = useState(false);
+  const [isDirty, setIsDirty] = useState(false);
+
+  // Timer refs to prevent memory leaks on unmount
+  const timersRef = useRef([]);
+  const setSafeTimeout = (fn, delay) => {
+    const id = setTimeout(() => {
+      timersRef.current = timersRef.current.filter((t) => t !== id);
+      fn();
+    }, delay);
+    timersRef.current.push(id);
+    return id;
+  };
+
+  useEffect(() => {
+    return () => {
+      timersRef.current.forEach(clearTimeout);
+      timersRef.current = [];
+    };
+  }, []);
   
+  const shopCode = userData?.shopCode || userData?.shop_code || '';
+
   const [formData, setFormData] = useState({
     shopName: '',
     ownerName: '',
@@ -35,8 +57,9 @@ export default function MerchantSettingsPage() {
     notificationsEnabled: true,
   });
 
+  // Only synchronize from userData if the user has not modified the form (prevents overwriting edits)
   useEffect(() => {
-    if (userData) {
+    if (userData && !isDirty) {
       setFormData({
         shopName: userData.shopName || '',
         ownerName: userData.ownerName || '',
@@ -45,45 +68,102 @@ export default function MerchantSettingsPage() {
         city: userData.city || '',
         pincode: userData.pincode || '',
         upiId: userData.upiId || '',
-        pricePerPageBW: userData.pricePerPageBW || 2,
-        pricePerPageColor: userData.pricePerPageColor || 5,
+        pricePerPageBW: userData.pricePerPageBW ?? 2,
+        pricePerPageColor: userData.pricePerPageColor ?? 5,
         autoAcceptJobs: userData.autoAcceptJobs || false,
         notificationsEnabled: userData.notificationsEnabled !== false,
       });
     }
-  }, [userData]);
+  }, [userData, isDirty]);
 
   const handleChange = (field) => (e) => {
     const value = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
+    setIsDirty(true);
+    setValidationError(null);
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
   const handleSave = async () => {
-    setSaving(true);
+    setValidationError(null);
     setSuccess(false);
+
+    // Front-end validation before database write
+    if (!formData.shopName?.trim()) {
+      setValidationError('Shop name is required.');
+      return;
+    }
+    if (!formData.ownerName?.trim()) {
+      setValidationError('Owner name is required.');
+      return;
+    }
+    const cleanPhone = (formData.phone || '').replace(/\D/g, '');
+    if (cleanPhone.length !== 10) {
+      setValidationError('Please enter a valid 10-digit mobile number.');
+      return;
+    }
+    const cleanPincode = (formData.pincode || '').replace(/\D/g, '');
+    if (cleanPincode.length !== 6) {
+      setValidationError('Please enter a valid 6-digit pincode.');
+      return;
+    }
+    if (!formData.upiId?.trim() || !formData.upiId.includes('@')) {
+      setValidationError('Please enter a valid UPI ID (e.g., yourname@upi).');
+      return;
+    }
+    const priceBW = parseFloat(formData.pricePerPageBW);
+    const priceColor = parseFloat(formData.pricePerPageColor);
+    if (isNaN(priceBW) || priceBW < 0) {
+      setValidationError('Black & White price per page must be 0 or greater.');
+      return;
+    }
+    if (isNaN(priceColor) || priceColor < 0) {
+      setValidationError('Color price per page must be 0 or greater.');
+      return;
+    }
+
+    setSaving(true);
     try {
-      await updateDoc(doc(db, 'users', user.uid), formData);
+      await upsertMerchantProfile(user.uid, {
+        ...formData,
+        phone: cleanPhone,
+        pincode: cleanPincode,
+        upiId: formData.upiId.trim().toLowerCase(),
+        pricePerPageBW: priceBW,
+        pricePerPageColor: priceColor,
+      });
+      setIsDirty(false);
       setSuccess(true);
-      setTimeout(() => setSuccess(false), 3000);
+      setSafeTimeout(() => setSuccess(false), 3000);
     } catch (err) {
       console.error('Error saving settings:', err);
-      alert('Failed to save settings');
+      setValidationError(err.message || 'Failed to save settings.');
     } finally {
       setSaving(false);
     }
   };
 
-  const printUrl = `${window.location.origin}/print?merchantId=${user?.uid}`;
+  const printUrl = `${window.location.origin}/print?merchantId=${user?.uid}${shopCode ? `&code=${shopCode}` : ''}`;
 
   const handleCopyLink = () => {
     navigator.clipboard.writeText(printUrl);
     setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    setSafeTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleCopyShopCode = () => {
+    if (!shopCode) return;
+    navigator.clipboard.writeText(shopCode);
+    setCopiedCode(true);
+    setSafeTimeout(() => setCopiedCode(false), 2000);
   };
 
   const handleDownloadQR = () => {
     const svg = document.getElementById('settings-qr-code');
+    if (!svg) return;
     const svgData = new XMLSerializer().serializeToString(svg);
+    const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+    const blobUrl = URL.createObjectURL(svgBlob);
+
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
     const img = new Image();
@@ -93,13 +173,19 @@ export default function MerchantSettingsPage() {
       ctx.fillStyle = 'white';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.drawImage(img, 0, 0);
+      URL.revokeObjectURL(blobUrl);
+
       const pngFile = canvas.toDataURL('image/png');
       const downloadLink = document.createElement('a');
-      downloadLink.download = `QuickPrint-QR-${formData.shopName || 'merchant'}.png`;
+      const safeShopName = (formData.shopName || 'merchant').replace(/[/\\?%*:|"<>]/g, '-');
+      downloadLink.download = `QuickPrint-QR-${safeShopName}.png`;
       downloadLink.href = pngFile;
       downloadLink.click();
     };
-    img.src = 'data:image/svg+xml;base64,' + btoa(svgData);
+    img.onerror = () => {
+      URL.revokeObjectURL(blobUrl);
+    };
+    img.src = blobUrl;
   };
 
   if (loading || !userData) {
@@ -115,6 +201,12 @@ export default function MerchantSettingsPage() {
       {success && (
         <Alert severity="success" sx={{ mb: 3 }}>
           Settings saved successfully!
+        </Alert>
+      )}
+
+      {validationError && (
+        <Alert severity="error" sx={{ mb: 3 }}>
+          {validationError}
         </Alert>
       )}
 
@@ -134,6 +226,18 @@ export default function MerchantSettingsPage() {
                   value={formData.shopName}
                   onChange={handleChange('shopName')}
                   fullWidth
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  label="Shop Code (Customer Lookup)"
+                  value={shopCode || 'Auto-generated on creation'}
+                  fullWidth
+                  InputProps={{
+                    readOnly: true,
+                    sx: { fontFamily: 'monospace', fontWeight: 'bold', letterSpacing: 1.5 },
+                  }}
+                  helperText="Customers can enter this 6-character code on homepage"
                 />
               </Grid>
               <Grid item xs={12} sm={6}>
@@ -163,7 +267,15 @@ export default function MerchantSettingsPage() {
                   fullWidth
                 />
               </Grid>
-              <Grid item xs={12} sm={8}>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  label="Pincode"
+                  value={formData.pincode}
+                  onChange={handleChange('pincode')}
+                  fullWidth
+                />
+              </Grid>
+              <Grid item xs={12}>
                 <TextField
                   label="Address"
                   value={formData.address}
@@ -171,14 +283,6 @@ export default function MerchantSettingsPage() {
                   fullWidth
                   multiline
                   rows={2}
-                />
-              </Grid>
-              <Grid item xs={12} sm={4}>
-                <TextField
-                  label="Pincode"
-                  value={formData.pincode}
-                  onChange={handleChange('pincode')}
-                  fullWidth
                 />
               </Grid>
             </Grid>
@@ -281,9 +385,33 @@ export default function MerchantSettingsPage() {
             <Typography variant="subtitle1" fontWeight="bold">
               {formData.shopName || 'Your Shop'}
             </Typography>
-            <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 2 }}>
+            <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1.5 }}>
               Scan to print instantly
             </Typography>
+
+            {/* 6-Character Shop Code Display */}
+            <Box sx={{ my: 1.5, p: 1.5, bgcolor: '#f0f4f8', borderRadius: 2, border: '1px dashed #90caf9' }}>
+              <Typography variant="caption" color="text.secondary" display="block">
+                6-Character Shop Code
+              </Typography>
+              <Typography
+                variant="h4"
+                fontWeight="bold"
+                sx={{ fontFamily: 'monospace', letterSpacing: 3, color: 'primary.main', my: 0.5 }}
+              >
+                {shopCode || '------'}
+              </Typography>
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<ContentCopyIcon />}
+                onClick={handleCopyShopCode}
+                disabled={!shopCode}
+                sx={{ mt: 0.5 }}
+              >
+                {copiedCode ? '✓ Copied Code!' : 'Copy Shop Code'}
+              </Button>
+            </Box>
 
             <Divider sx={{ my: 2 }} />
 

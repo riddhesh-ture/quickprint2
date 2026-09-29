@@ -1,5 +1,5 @@
 // src/pages/MerchantAnalyticsPage.jsx
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Container, Typography, Box, Paper, Grid, CircularProgress,
   ToggleButton, ToggleButtonGroup, Card, CardContent, Divider,
@@ -22,9 +22,20 @@ import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
 import ImageIcon from '@mui/icons-material/Image';
 import ArticleIcon from '@mui/icons-material/Article';
 import { useAuth } from '../hooks/useAuth';
-import { useCollection } from '../hooks/useFirestore';
+import { useOutletContext } from 'react-router-dom';
+import { supabase } from '../supabase/client';
+import { toCamelCase } from '../supabase/db';
 
 const COLORS = ['#2196f3', '#4caf50', '#ff9800', '#f44336', '#9c27b0', '#00bcd4', '#e91e63', '#3f51b5'];
+
+// Safe timestamp to Date extractor
+const extractDate = (val) => {
+  if (!val) return null;
+  if (typeof val.toDate === 'function') return val.toDate();
+  if (val instanceof Date) return val;
+  const d = new Date(val);
+  return isNaN(d.getTime()) ? null : d;
+};
 
 // Stat Card Component
 const StatCard = ({ title, value, subtitle, icon, trend, trendValue, color = 'primary', secondaryValue }) => (
@@ -88,70 +99,132 @@ const SectionHeader = ({ title, subtitle }) => (
 );
 
 export default function MerchantAnalyticsPage() {
-  const { user, userData, loading } = useAuth();
+  const { userData, loading, user } = useAuth();
   const [timeRange, setTimeRange] = useState('week');
+  const [analyticsJobs, setAnalyticsJobs] = useState([]);
+  const [loadingJobs, setLoadingJobs] = useState(true);
 
-  const { documents: jobs } = useCollection('printJobs', {
-    fieldName: 'merchantId',
-    operator: '==',
-    value: user?.uid,
-  });
+  const merchantId = user?.uid || userData?.id;
+
+  // Fetch analytics data with only required columns
+  useEffect(() => {
+    if (!merchantId) return;
+    let isMounted = true;
+    setLoadingJobs(true);
+    supabase
+      .from('print_jobs')
+      .select('id, created_at, status, cost, total_pages, bw_pages, color_pages, payment_method')
+      .eq('merchant_id', merchantId)
+      .order('created_at', { ascending: false })
+      .limit(1000)
+      .then(({ data, error }) => {
+        if (!error && data && isMounted) {
+          setAnalyticsJobs(data.map(toCamelCase));
+        }
+      })
+      .finally(() => {
+        if (isMounted) setLoadingJobs(false);
+      });
+
+    return () => { isMounted = false; };
+  }, [merchantId]);
+
+  const jobs = analyticsJobs;
 
   // Process data for charts
   const analyticsData = useMemo(() => {
-    if (!jobs) return null;
+    if (!jobs || jobs.length === 0) return null;
 
     const completedJobs = jobs.filter(j => ['completed', 'paid'].includes(j.status));
     const now = new Date();
+    const todayStr = now.toLocaleDateString('en-CA');
 
-    // Last 7 days data
-    const last7DaysData = [];
-    for (let i = 6; i >= 0; i--) {
-      const date = new Date(now);
-      date.setDate(date.getDate() - i);
-      const dateStr = date.toISOString().split('T')[0];
-      const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
+    // Single-pass bucketing: bucket jobs by date and month in O(N) (Issue 18)
+    const jobsByDate = new Map();
+    const jobsByMonth = new Map();
 
-      const dayJobs = completedJobs.filter(j => {
-        const jobDate = j.createdAt?.toDate?.()?.toISOString().split('T')[0];
-        return jobDate === dateStr;
-      });
+    for (const j of completedJobs) {
+      const jd = extractDate(j.createdAt);
+      if (!jd) continue;
 
-      last7DaysData.push({
-        name: dayName,
-        date: dateStr,
-        prints: dayJobs.length,
-        earnings: dayJobs.reduce((sum, j) => sum + (j.cost || 0), 0),
-        files: dayJobs.reduce((sum, j) => sum + (j.files?.length || 0), 0),
-      });
+      const dateKey = jd.toLocaleDateString('en-CA');
+      const monthKey = `${jd.getFullYear()}-${String(jd.getMonth() + 1).padStart(2, '0')}`;
+
+      if (!jobsByDate.has(dateKey)) jobsByDate.set(dateKey, []);
+      jobsByDate.get(dateKey).push(j);
+
+      if (!jobsByMonth.has(monthKey)) jobsByMonth.set(monthKey, []);
+      jobsByMonth.get(monthKey).push(j);
+    }
+
+    // Dynamic trend data based on timeRange ('week', 'month', 'year')
+    const trendData = [];
+    if (timeRange === 'year') {
+      for (let i = 11; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const yearMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        const monthName = d.toLocaleDateString('en-US', { month: 'short' });
+        const monthJobs = jobsByMonth.get(yearMonth) || [];
+
+        trendData.push({
+          name: monthName,
+          prints: monthJobs.reduce((sum, j) => sum + (j.totalPages || 1), 0),
+          earnings: monthJobs.reduce((sum, j) => sum + (j.cost || 0), 0),
+          files: monthJobs.reduce((sum, j) => sum + (j.files?.length || 0), 0),
+        });
+      }
+    } else {
+      const numDays = timeRange === 'month' ? 30 : 7;
+      for (let i = numDays - 1; i >= 0; i--) {
+        const d = new Date(now);
+        d.setDate(d.getDate() - i);
+        const dateStr = d.toLocaleDateString('en-CA');
+        const label = timeRange === 'week'
+          ? d.toLocaleDateString('en-US', { weekday: 'short' })
+          : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        const dayJobs = jobsByDate.get(dateStr) || [];
+
+        trendData.push({
+          name: label,
+          date: dateStr,
+          prints: dayJobs.reduce((sum, j) => sum + (j.totalPages || 1), 0),
+          earnings: dayJobs.reduce((sum, j) => sum + (j.cost || 0), 0),
+          files: dayJobs.reduce((sum, j) => sum + (j.files?.length || 0), 0),
+        });
+      }
     }
 
     // Hourly distribution (for today)
-    const todayStr = now.toISOString().split('T')[0];
     const hourlyData = Array(24).fill(0).map((_, hour) => ({
       hour: `${hour.toString().padStart(2, '0')}:00`,
       jobs: 0,
     }));
     
-    jobs.filter(j => {
-      const jobDate = j.createdAt?.toDate?.()?.toISOString().split('T')[0];
-      return jobDate === todayStr;
-    }).forEach(job => {
-      const hour = job.createdAt?.toDate?.()?.getHours() || 0;
+    const todayJobs = jobsByDate.get(todayStr) || [];
+    todayJobs.forEach(job => {
+      const jd = extractDate(job.createdAt);
+      const hour = jd ? jd.getHours() : 0;
       hourlyData[hour].jobs++;
     });
 
-    // Color vs BW distribution
-    let colorCount = 0, bwCount = 0;
+    // Color vs BW page distribution (using actual bwPages and colorPages)
+    let colorPagesCount = 0, bwPagesCount = 0;
     completedJobs.forEach(job => {
-      job.files?.forEach(file => {
-        if (file.specs?.color === 'color') colorCount++;
-        else bwCount++;
-      });
+      if (job.bwPages !== undefined || job.colorPages !== undefined) {
+        bwPagesCount += Number(job.bwPages || 0);
+        colorPagesCount += Number(job.colorPages || 0);
+      } else {
+        job.files?.forEach(file => {
+          const copies = parseInt(file.specs?.copies, 10) || 1;
+          const pages = (file.specs?.pageCount || 1) * copies;
+          if (file.specs?.color === 'color') colorPagesCount += pages;
+          else bwPagesCount += pages;
+        });
+      }
     });
     const colorDistribution = [
-      { name: 'Black & White', value: bwCount || 1, fill: '#424242' },
-      { name: 'Color', value: colorCount || 0, fill: '#2196f3' },
+      { name: 'Black & White', value: bwPagesCount || 0, fill: '#424242' },
+      { name: 'Color', value: colorPagesCount || 0, fill: '#2196f3' },
     ];
 
     // File type distribution
@@ -196,19 +269,23 @@ export default function MerchantAnalyticsPage() {
 
     // Recent jobs for activity feed
     const recentJobs = [...jobs]
-      .sort((a, b) => (b.createdAt?.toDate?.() || 0) - (a.createdAt?.toDate?.() || 0))
+      .sort((a, b) => {
+        const timeA = extractDate(a.createdAt)?.getTime() || 0;
+        const timeB = extractDate(b.createdAt)?.getTime() || 0;
+        return timeB - timeA;
+      })
       .slice(0, 5);
 
-    // Calculate averages
-    const totalDays = 7;
-    const avgDailyPrints = Math.round(completedJobs.length / totalDays);
+    // Calculate averages based on selected period
+    const totalDays = timeRange === 'month' ? 30 : 7;
+    const avgDailyPrints = Math.round(completedJobs.reduce((sum, j) => sum + (j.totalPages || 1), 0) / totalDays);
     const avgDailyEarnings = Math.round(completedJobs.reduce((sum, j) => sum + (j.cost || 0), 0) / totalDays);
     const avgJobValue = completedJobs.length > 0
       ? Math.round(completedJobs.reduce((sum, j) => sum + (j.cost || 0), 0) / completedJobs.length)
       : 0;
 
     return {
-      last7DaysData,
+      trendData,
       hourlyData: hourlyData.filter((_, i) => i >= 6 && i <= 22), // 6 AM to 10 PM
       colorDistribution,
       fileTypeData,
@@ -221,7 +298,7 @@ export default function MerchantAnalyticsPage() {
       totalJobs: completedJobs.length,
       totalFiles: completedJobs.reduce((sum, j) => sum + (j.files?.length || 0), 0),
     };
-  }, [jobs]);
+  }, [jobs, timeRange]);
 
   if (loading || !userData) {
     return (
@@ -303,9 +380,12 @@ export default function MerchantAnalyticsPage() {
       <Grid container spacing={3} sx={{ mb: 4 }}>
         <Grid item xs={12} lg={8}>
           <Paper sx={{ p: 3, height: '100%' }}>
-            <SectionHeader title="Revenue & Prints Overview" subtitle="Last 7 days performance" />
+            <SectionHeader
+              title="Revenue & Prints Overview"
+              subtitle={`${timeRange === 'week' ? 'Last 7 days' : timeRange === 'month' ? 'Last 30 days' : 'Last 12 months'} performance`}
+            />
             <ResponsiveContainer width="100%" height={320}>
-              <ComposedChart data={analyticsData?.last7DaysData || []}>
+              <ComposedChart data={analyticsData?.trendData || []}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                 <XAxis dataKey="name" />
                 <YAxis yAxisId="left" orientation="left" stroke="#2196f3" />
@@ -436,7 +516,7 @@ export default function MerchantAnalyticsPage() {
                     secondary={
                       <Box component="span" sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                         <AccessTimeIcon sx={{ fontSize: 12 }} />
-                        {job.createdAt?.toDate?.()?.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) || 'N/A'}
+                        {extractDate(job.createdAt)?.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) || 'N/A'}
                         {job.cost && ` • ₹${job.cost}`}
                       </Box>
                     }

@@ -6,7 +6,8 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
-
+AUDIT_REPORT.md
+PROGRESS.md
 node_modules
 dist
 dist-ssr
@@ -24,4 +25,6 @@ dist-ssr
 *.sw?
 
 # Local Environment Variables
+.env
 .env.local
+.env.*.local

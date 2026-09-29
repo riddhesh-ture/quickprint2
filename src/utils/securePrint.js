@@ -1,21 +1,73 @@
 // src/utils/securePrint.js
+/**
+ * Secure print utility with anti-download protection, popup blocker bypass,
+ * and zero base64 memory bloat (uses clean Object URLs).
+ */
 
 /**
- * Generate a secure print window with anti-download protections
+ * Escape HTML to prevent XSS / DOM injection
  */
-export function createSecurePrintWindow() {
-  const printWindow = window.open('', '_blank', 'width=900,height=700,menubar=no,toolbar=no,location=no,status=no,scrollbars=yes');
-  
-  if (!printWindow) {
-    throw new Error('Popup blocked. Please allow popups for printing.');
-  }
-
-  return printWindow;
+export function escapeHtml(str) {
+  return String(str || '').replace(/[&<>"']/g, (m) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  }[m]));
 }
 
 /**
- * Security CSS to prevent copying/screenshots
+ * Pre-opens a print window synchronously during a user click gesture
+ * to completely bypass modern browser popup blockers.
  */
+export function preOpenPrintWindow(title = 'QuickPrint') {
+  try {
+    const printWindow = window.open(
+      'about:blank',
+      '_blank',
+      'width=900,height=750,menubar=no,toolbar=no,location=no,status=no,scrollbars=yes'
+    );
+    if (printWindow) {
+      printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>${escapeHtml(title)}</title>
+          <style>
+            body { font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; color: #555; }
+          </style>
+        </head>
+        <body>
+          <p>Preparing document for printing, please wait...</p>
+        </body>
+        </html>
+      `);
+      printWindow.document.close();
+      return printWindow;
+    }
+  } catch (err) {
+    console.warn('Popup blocked or failed to pre-open window:', err);
+  }
+  return null;
+}
+
+/**
+ * Fallback hidden print iframe when popup window is blocked
+ */
+function createPrintIframe() {
+  const iframe = document.createElement('iframe');
+  iframe.style.position = 'fixed';
+  iframe.style.right = '0';
+  iframe.style.bottom = '0';
+  iframe.style.width = '0';
+  iframe.style.height = '0';
+  iframe.style.border = '0';
+  iframe.style.visibility = 'hidden';
+  document.body.appendChild(iframe);
+  return iframe;
+}
+
 const SECURITY_CSS = `
   * {
     -webkit-user-select: none !important;
@@ -31,240 +83,454 @@ const SECURITY_CSS = `
   }
   @media print {
     body { background: white; }
+    .no-print { display: none !important; }
   }
 `;
 
-/**
- * Security JavaScript to prevent various download methods
- */
 const SECURITY_SCRIPT = `
-  document.addEventListener('contextmenu', e => e.preventDefault());
-  document.addEventListener('keydown', e => {
-    if (e.ctrlKey && (e.key === 'c' || e.key === 'p' || e.key === 's' || e.key === 'a')) {
+  document.addEventListener('contextmenu', function(e) { e.preventDefault(); });
+  document.addEventListener('keydown', function(e) {
+    if (e.ctrlKey && (e.key === 'c' || e.key === 's' || e.key === 'a')) {
       e.preventDefault();
     }
   });
 `;
 
-/**
- * Generate watermark HTML
- */
 function generateWatermarkHTML(merchantName = 'QuickPrint') {
-  return `<div style="position:fixed;top:10px;right:10px;opacity:0.3;font-size:10px;pointer-events:none;">
-    ${merchantName || 'QuickPrint'} - ${new Date().toLocaleString()}
-  </div>`;
+  const safeMerchant = escapeHtml(merchantName);
+  const now = escapeHtml(new Date().toLocaleString());
+  return `
+    <div style="position:fixed;top:10px;right:10px;opacity:0.3;font-size:10px;pointer-events:none;z-index:9999;" class="no-print">
+      ${safeMerchant} - ${now}
+    </div>
+  `;
 }
 
 /**
- * Securely print an image file
+ * Securely print an Image file using ObjectURL (zero base64 overhead)
  */
-export async function securePrintImage(fileBlob, fileName, specs, merchantName) {
-  const printWindow = createSecurePrintWindow();
-  
+export async function securePrintImage(fileBlob, fileName, specs, merchantName, existingWindow = null) {
+  const blobUrl = URL.createObjectURL(fileBlob);
+  const isColor = specs?.color === 'color';
+  const safeFileName = escapeHtml(fileName);
+  const safeMerchant = escapeHtml(merchantName);
+
   return new Promise((resolve) => {
-    const reader = new FileReader();
-    
-    reader.onload = () => {
-      const base64Data = reader.result;
-      const isColor = specs?.color === 'color';
+    let targetDoc = null;
+    let targetWin = null;
+    let iframeElem = null;
 
-      const html = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <title>Print - ${fileName}</title>
-          <style>
-            ${SECURITY_CSS}
-            @media print {
-              img { ${!isColor ? 'filter: grayscale(100%);' : ''} max-width: 100%; }
-            }
-          </style>
-        </head>
-        <body>
-          ${generateWatermarkHTML(merchantName)}
-          <img src="${base64Data}" style="max-width:100%;${!isColor ? 'filter:grayscale(100%);' : ''}" />
-          <script>
-            ${SECURITY_SCRIPT}
-            window.onload = function() { setTimeout(function() { window.print(); }, 300); };
-            window.onafterprint = function() { window.close(); };
-            setTimeout(function() { window.close(); }, 30000);
-          </script>
-        </body>
-        </html>
-      `;
+    if (existingWindow && !existingWindow.closed) {
+      targetWin = existingWindow;
+      targetDoc = existingWindow.document;
+    } else {
+      // Use hidden iframe fallback to guarantee popup-blocker bypass
+      iframeElem = createPrintIframe();
+      targetWin = iframeElem.contentWindow;
+      targetDoc = targetWin.document;
+    }
 
-      printWindow.document.write(html);
-      printWindow.document.close();
-      
-      // Resolve immediately after writing
-      setTimeout(resolve, 500);
-    };
+    const printId = 'pimg_' + Math.random().toString(36).slice(2);
 
-    reader.onerror = () => resolve(); // Resolve even on error
-    reader.readAsDataURL(fileBlob);
-    
-    // Failsafe resolve
-    setTimeout(resolve, 2000);
-  });
-}
-
-/**
- * Securely print a PDF file
- */
-export async function securePrintPDF(fileBlob, fileName, specs, merchantName) {
-  const printWindow = createSecurePrintWindow();
-  
-  return new Promise((resolve) => {
-    const reader = new FileReader();
-    
-    reader.onload = () => {
-      const base64Data = reader.result;
-      const base64Content = base64Data.split(',')[1];
-      const isColor = specs?.color === 'color';
-
-      const html = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <title>Print - ${fileName}</title>
-          <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-          <style>
-            ${SECURITY_CSS}
-            canvas { ${!isColor ? 'filter: grayscale(100%);' : ''} display: block; margin: 10px auto; }
-            @media print { canvas { page-break-after: always; } }
-          </style>
-        </head>
-        <body>
-          ${generateWatermarkHTML(merchantName)}
-          <div id="pages"></div>
-          <script>
-            ${SECURITY_SCRIPT}
-            pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-            
-            async function renderPDF() {
-              try {
-                const pdfData = atob('${base64Content}');
-                const pdf = await pdfjsLib.getDocument({ data: pdfData }).promise;
-                const container = document.getElementById('pages');
-                
-                for (let i = 1; i <= pdf.numPages; i++) {
-                  const page = await pdf.getPage(i);
-                  const viewport = page.getViewport({ scale: 1.5 });
-                  const canvas = document.createElement('canvas');
-                  canvas.width = viewport.width;
-                  canvas.height = viewport.height;
-                  container.appendChild(canvas);
-                  await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
-                }
-                setTimeout(function() { window.print(); }, 300);
-              } catch (e) {
-                document.body.innerHTML = '<p style="color:red;">Error loading PDF</p>';
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Print - ${safeFileName}</title>
+        <style>
+          ${SECURITY_CSS}
+          img {
+            max-width: 100%;
+            display: block;
+            margin: 0 auto;
+            ${!isColor ? 'filter: grayscale(100%);' : ''}
+          }
+        </style>
+      </head>
+      <body>
+        ${generateWatermarkHTML(safeMerchant)}
+        <img id="printImg" src="${blobUrl}" />
+        <script>
+          ${SECURITY_SCRIPT}
+          const img = document.getElementById('printImg');
+          img.onload = function() {
+            setTimeout(function() {
+              window.focus();
+              window.print();
+            }, 300);
+          };
+          window.onafterprint = function() {
+            try { URL.revokeObjectURL('${blobUrl}'); } catch(e) {}
+            try {
+              if (window.parent && window.parent !== window) {
+                window.parent.postMessage({ type: 'print_done', printId: '${printId}' }, '*');
               }
-            }
-            renderPDF();
-            window.onafterprint = function() { window.close(); };
-            setTimeout(function() { window.close(); }, 30000);
-          </script>
-        </body>
-        </html>
-      `;
+              if (window.opener) {
+                window.opener.postMessage({ type: 'print_done', printId: '${printId}' }, '*');
+                window.close();
+              }
+            } catch(e) {}
+          };
+          window.addEventListener('beforeunload', function() {
+            try { URL.revokeObjectURL('${blobUrl}'); } catch(e) {}
+          });
+        </script>
+      </body>
+      </html>
+    `;
 
-      printWindow.document.write(html);
-      printWindow.document.close();
-      setTimeout(resolve, 500);
-    };
+    targetDoc.open();
+    targetDoc.write(html);
+    targetDoc.close();
 
-    reader.onerror = () => resolve();
-    reader.readAsDataURL(fileBlob);
-    setTimeout(resolve, 2000);
-  });
-}
-
-/**
- * Securely print a DOCX file (converts to images first)
- */
-export async function securePrintDOCX(fileBlob, fileName, specs, merchantName) {
-  const printWindow = createSecurePrintWindow();
-  
-  return new Promise((resolve) => {
-    const reader = new FileReader();
-    
-    reader.onload = async () => {
+    // Event-driven cleanup: revoke ObjectURL and remove iframe when printing completes
+    const cleanup = () => {
       try {
-        const arrayBuffer = reader.result;
-        const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
-        const isColor = specs?.color === 'color';
-
-        const html = `
-          <!DOCTYPE html>
-          <html>
-          <head>
-            <title>Print - ${fileName}</title>
-            <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
-            <style>
-              ${SECURITY_CSS}
-              .content { max-width: 800px; margin: 0 auto; font-family: Arial; ${!isColor ? 'filter: grayscale(100%);' : ''} }
-            </style>
-          </head>
-          <body>
-            ${generateWatermarkHTML(merchantName)}
-            <div id="content" class="content">Loading...</div>
-            <script>
-              ${SECURITY_SCRIPT}
-              const base64 = '${base64}';
-              const binary = atob(base64);
-              const bytes = new Uint8Array(binary.length);
-              for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-              
-              mammoth.convertToHtml({ arrayBuffer: bytes.buffer })
-                .then(function(result) {
-                  document.getElementById('content').innerHTML = result.value;
-                  setTimeout(function() { window.print(); }, 300);
-                })
-                .catch(function(e) {
-                  document.getElementById('content').innerHTML = '<p style="color:red;">Error loading document</p>';
-                });
-              
-              window.onafterprint = function() { window.close(); };
-              setTimeout(function() { window.close(); }, 30000);
-            </script>
-          </body>
-          </html>
-        `;
-
-        printWindow.document.write(html);
-        printWindow.document.close();
+        URL.revokeObjectURL(blobUrl);
       } catch (e) {
-        console.error('DOCX error:', e);
+        /* ignore revocation error if already revoked */
       }
-      setTimeout(resolve, 500);
+      if (iframeElem && iframeElem.parentNode) {
+        iframeElem.parentNode.removeChild(iframeElem);
+      }
     };
 
-    reader.onerror = () => resolve();
-    reader.readAsArrayBuffer(fileBlob);
-    setTimeout(resolve, 2000);
+    let isDone = false;
+    const finish = () => {
+      if (isDone) return;
+      isDone = true;
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('message', handleMsg);
+      }
+      cleanup();
+      resolve();
+    };
+
+    const handleMsg = (e) => {
+      if (e?.data?.type === 'print_done' && e?.data?.printId === printId) {
+        finish();
+      }
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('message', handleMsg);
+    }
+
+    if (targetWin) {
+      try {
+        targetWin.addEventListener('afterprint', finish, { once: true });
+      } catch (_) {
+        // Cross-window access might fail in sandboxed or cross-origin contexts
+      }
+    }
+
+    // Safety timeout fallback if browser does not fire afterprint (e.g. headless/sandboxed)
+    setTimeout(finish, 45000);
   });
 }
 
 /**
- * Main secure print function - routes to appropriate handler
+ * Securely print a PDF file using PDF.js and clean Object URLs (no atob / memory bloat)
  */
-export async function securePrint(fileBlob, fileName, specs, merchantName = 'QuickPrint') {
-  const mimeType = fileBlob.type?.toLowerCase() || '';
+export async function securePrintPDF(fileBlob, fileName, specs, merchantName, existingWindow = null) {
+  const blobUrl = URL.createObjectURL(fileBlob);
+  const isColor = specs?.color === 'color';
+  const safeFileName = escapeHtml(fileName);
+  const safeMerchant = escapeHtml(merchantName);
+
+  return new Promise((resolve) => {
+    let targetDoc = null;
+    let targetWin = null;
+    let iframeElem = null;
+
+    if (existingWindow && !existingWindow.closed) {
+      targetWin = existingWindow;
+      targetDoc = existingWindow.document;
+    } else {
+      iframeElem = createPrintIframe();
+      targetWin = iframeElem.contentWindow;
+      targetDoc = targetWin.document;
+    }
+
+    const printId = 'ppdf_' + Math.random().toString(36).slice(2);
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Print - ${safeFileName}</title>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+        <style>
+          ${SECURITY_CSS}
+          canvas {
+            ${!isColor ? 'filter: grayscale(100%);' : ''}
+            display: block;
+            margin: 10px auto;
+            max-width: 100%;
+          }
+          @media print {
+            canvas {
+              page-break-after: always;
+              page-break-inside: avoid;
+            }
+          }
+          #pages { width: 100%; }
+        </style>
+      </head>
+      <body>
+        ${generateWatermarkHTML(safeMerchant)}
+        <div id="pages"></div>
+        <script>
+          ${SECURITY_SCRIPT}
+          pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+          
+          async function renderAndPrint() {
+            try {
+              const pdf = await pdfjsLib.getDocument('${blobUrl}').promise;
+              const container = document.getElementById('pages');
+              
+              for (let i = 1; i <= pdf.numPages; i++) {
+                const page = await pdf.getPage(i);
+                const viewport = page.getViewport({ scale: 1.5 });
+                const canvas = document.createElement('canvas');
+                canvas.width = viewport.width;
+                canvas.height = viewport.height;
+                container.appendChild(canvas);
+                await page.render({ canvasContext: canvas.getContext('2d'), viewport: viewport }).promise;
+              }
+
+              setTimeout(function() {
+                window.focus();
+                window.print();
+              }, 400);
+            } catch (err) {
+              console.error('PDF print error:', err);
+              document.body.innerHTML = '<p style="color:red;padding:20px;">Failed to render PDF for printing.</p>';
+            }
+          }
+
+          renderAndPrint();
+
+          window.onafterprint = function() {
+            try { URL.revokeObjectURL('${blobUrl}'); } catch(e) {}
+            try {
+              if (window.parent && window.parent !== window) {
+                window.parent.postMessage({ type: 'print_done', printId: '${printId}' }, '*');
+              }
+              if (window.opener) {
+                window.opener.postMessage({ type: 'print_done', printId: '${printId}' }, '*');
+                window.close();
+              }
+            } catch(e) {}
+          };
+          window.addEventListener('beforeunload', function() {
+            try { URL.revokeObjectURL('${blobUrl}'); } catch(e) {}
+          });
+        </script>
+      </body>
+      </html>
+    `;
+
+    targetDoc.open();
+    targetDoc.write(html);
+    targetDoc.close();
+
+    // Event-driven cleanup: revoke ObjectURL and remove iframe when printing completes
+    const cleanup = () => {
+      try {
+        URL.revokeObjectURL(blobUrl);
+      } catch (e) {
+        /* ignore revocation error if already revoked */
+      }
+      if (iframeElem && iframeElem.parentNode) {
+        iframeElem.parentNode.removeChild(iframeElem);
+      }
+    };
+
+    let isDone = false;
+    const finish = () => {
+      if (isDone) return;
+      isDone = true;
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('message', handleMsg);
+      }
+      cleanup();
+      resolve();
+    };
+
+    const handleMsg = (e) => {
+      if (e?.data?.type === 'print_done' && e?.data?.printId === printId) {
+        finish();
+      }
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('message', handleMsg);
+    }
+
+    if (targetWin) {
+      try {
+        targetWin.addEventListener('afterprint', finish, { once: true });
+      } catch (_) {
+        // Cross-window access might fail in sandboxed or cross-origin contexts
+      }
+    }
+
+    // Safety timeout fallback if browser does not fire afterprint (e.g. headless/sandboxed)
+    setTimeout(finish, 45000);
+  });
+}
+
+/**
+ * Securely print a DOC/DOCX file using Mammoth
+ */
+export async function securePrintDOCX(fileBlob, fileName, specs, merchantName, existingWindow = null) {
+  const blobUrl = URL.createObjectURL(fileBlob);
+  const isColor = specs?.color === 'color';
+  const safeFileName = escapeHtml(fileName);
+  const safeMerchant = escapeHtml(merchantName);
+
+  return new Promise((resolve) => {
+    let targetDoc = null;
+    let targetWin = null;
+    let iframeElem = null;
+
+    if (existingWindow && !existingWindow.closed) {
+      targetWin = existingWindow;
+      targetDoc = existingWindow.document;
+    } else {
+      iframeElem = createPrintIframe();
+      targetWin = iframeElem.contentWindow;
+      targetDoc = targetWin.document;
+    }
+
+    const printId = 'pdocx_' + Math.random().toString(36).slice(2);
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Print - ${safeFileName}</title>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+        <style>
+          ${SECURITY_CSS}
+          .content {
+            max-width: 800px;
+            margin: 0 auto;
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            ${!isColor ? 'filter: grayscale(100%);' : ''}
+          }
+        </style>
+      </head>
+      <body>
+        ${generateWatermarkHTML(safeMerchant)}
+        <div id="content" class="content">Loading document...</div>
+        <script>
+          ${SECURITY_SCRIPT}
+          fetch('${blobUrl}')
+            .then(res => res.arrayBuffer())
+            .then(buffer => mammoth.convertToHtml({ arrayBuffer: buffer }))
+            .then(result => {
+              document.getElementById('content').innerHTML = result.value;
+              setTimeout(function() {
+                window.focus();
+                window.print();
+              }, 400);
+            })
+            .catch(err => {
+              console.error('DOCX print error:', err);
+              document.getElementById('content').innerHTML = '<p style="color:red;">Error loading document.</p>';
+            });
+
+          window.onafterprint = function() {
+            try { URL.revokeObjectURL('${blobUrl}'); } catch(e) {}
+            try {
+              if (window.parent && window.parent !== window) {
+                window.parent.postMessage({ type: 'print_done', printId: '${printId}' }, '*');
+              }
+              if (window.opener) {
+                window.opener.postMessage({ type: 'print_done', printId: '${printId}' }, '*');
+                window.close();
+              }
+            } catch(e) {}
+          };
+          window.addEventListener('beforeunload', function() {
+            try { URL.revokeObjectURL('${blobUrl}'); } catch(e) {}
+          });
+        </script>
+      </body>
+      </html>
+    `;
+
+    targetDoc.open();
+    targetDoc.write(html);
+    targetDoc.close();
+
+    // Event-driven cleanup: revoke ObjectURL and remove iframe when printing completes
+    const cleanup = () => {
+      try {
+        URL.revokeObjectURL(blobUrl);
+      } catch (e) {
+        /* ignore revocation error if already revoked */
+      }
+      if (iframeElem && iframeElem.parentNode) {
+        iframeElem.parentNode.removeChild(iframeElem);
+      }
+    };
+
+    let isDone = false;
+    const finish = () => {
+      if (isDone) return;
+      isDone = true;
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('message', handleMsg);
+      }
+      cleanup();
+      resolve();
+    };
+
+    const handleMsg = (e) => {
+      if (e?.data?.type === 'print_done' && e?.data?.printId === printId) {
+        finish();
+      }
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('message', handleMsg);
+    }
+
+    if (targetWin) {
+      try {
+        targetWin.addEventListener('afterprint', finish, { once: true });
+      } catch (_) {
+        // Cross-window access might fail in sandboxed or cross-origin contexts
+      }
+    }
+
+    // Safety timeout fallback if browser does not fire afterprint (e.g. headless/sandboxed)
+    setTimeout(finish, 45000);
+  });
+}
+
+/**
+ * Main secure print function
+ */
+export async function securePrint(fileBlob, fileName, specs, merchantName = 'QuickPrint', existingWindow = null) {
+  const mimeType = (fileBlob.type || '').toLowerCase();
   const extension = fileName?.split('.').pop()?.toLowerCase() || '';
 
-  // Determine file type and route to appropriate printer
   if (mimeType === 'application/pdf' || extension === 'pdf') {
-    return securePrintPDF(fileBlob, fileName, specs, merchantName);
+    return securePrintPDF(fileBlob, fileName, specs, merchantName, existingWindow);
   }
   
-  if (mimeType.startsWith('image/') || ['jpg', 'jpeg', 'png', 'webp', 'bmp'].includes(extension)) {
-    return securePrintImage(fileBlob, fileName, specs, merchantName);
+  if (mimeType.startsWith('image/') || ['jpg', 'jpeg', 'png', 'webp'].includes(extension)) {
+    return securePrintImage(fileBlob, fileName, specs, merchantName, existingWindow);
   }
   
   if (mimeType.includes('wordprocessingml') || mimeType === 'application/msword' || ['doc', 'docx'].includes(extension)) {
-    return securePrintDOCX(fileBlob, fileName, specs, merchantName);
+    return securePrintDOCX(fileBlob, fileName, specs, merchantName, existingWindow);
   }
 
-  throw new Error(`Unsupported file type: ${mimeType || extension}`);
+  throw new Error(`Unsupported printable file format: ${mimeType || extension}`);
 }

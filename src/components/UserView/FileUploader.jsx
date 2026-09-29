@@ -1,27 +1,12 @@
+// src/components/UserView/FileUploader.jsx
 import React, { useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
-import { Box, Typography, Paper, Alert } from '@mui/material';
+import { Box, Typography, Paper, Alert, Chip, Stack } from '@mui/material';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
-
-// Allowed file types for printing
-const ALLOWED_TYPES = {
-  'application/pdf': { icon: 'PictureAsPdfIcon', label: 'PDF' },
-  'image/jpeg': { icon: 'ImageIcon', label: 'JPEG' },
-  'image/jpg': { icon: 'ImageIcon', label: 'JPG' },
-  'image/png': { icon: 'ImageIcon', label: 'PNG' },
-  'image/webp': { icon: 'ImageIcon', label: 'WebP' },
-  'image/gif': { icon: 'ImageIcon', label: 'GIF' },
-  'application/msword': { icon: 'DescriptionIcon', label: 'DOC' },
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': { icon: 'DescriptionIcon', label: 'DOCX' },
-  'application/vnd.ms-excel': { icon: 'DescriptionIcon', label: 'XLS' },
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': { icon: 'DescriptionIcon', label: 'XLSX' },
-  'application/vnd.ms-powerpoint': { icon: 'DescriptionIcon', label: 'PPT' },
-  'application/vnd.openxmlformats-officedocument.presentationml.presentation': { icon: 'DescriptionIcon', label: 'PPTX' },
-  'text/plain': { icon: 'DescriptionIcon', label: 'TXT' },
-};
-
-const ALLOWED_EXTENSIONS = '.pdf,.jpg,.jpeg,.png,.webp,.gif,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt';
-const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25MB
+import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
+import ImageIcon from '@mui/icons-material/Image';
+import DescriptionIcon from '@mui/icons-material/Description';
+import { MAX_FILE_SIZE } from '../../utils/fileValidation';
 
 export default function FileUploader({ onFilesAdded }) {
   const [error, setError] = React.useState(null);
@@ -30,21 +15,21 @@ export default function FileUploader({ onFilesAdded }) {
     setError(null);
 
     // Handle rejected files
-    if (rejectedFiles.length > 0) {
+    if (rejectedFiles && rejectedFiles.length > 0) {
       const errors = rejectedFiles.map(f => {
-        if (f.errors[0]?.code === 'file-too-large') {
-          return `${f.file.name}: File too large (max 25MB)`;
+        if (f.errors?.[0]?.code === 'file-too-large') {
+          return `${f.file.name}: Exceeds maximum 50MB size limit`;
         }
-        if (f.errors[0]?.code === 'file-invalid-type') {
-          return `${f.file.name}: Invalid file type`;
+        if (f.errors?.[0]?.code === 'file-invalid-type') {
+          return `${f.file.name}: Unsupported format. Only PDF, Images (JPG, PNG, WebP), and Word (DOC, DOCX) allowed`;
         }
-        return `${f.file.name}: ${f.errors[0]?.message}`;
+        return `${f.file.name}: ${f.errors?.[0]?.message || 'Invalid file'}`;
       });
-      setError(errors.join(', '));
+      setError(errors.join('. '));
     }
 
     // Process accepted files
-    if (acceptedFiles.length > 0) {
+    if (acceptedFiles && acceptedFiles.length > 0) {
       onFilesAdded(acceptedFiles);
     }
   }, [onFilesAdded]);
@@ -53,16 +38,13 @@ export default function FileUploader({ onFilesAdded }) {
     onDrop,
     accept: {
       'application/pdf': ['.pdf'],
-      'image/*': ['.jpg', '.jpeg', '.png', '.webp', '.gif'],
+      'image/jpeg': ['.jpg', '.jpeg'],
+      'image/png': ['.png'],
+      'image/webp': ['.webp'],
       'application/msword': ['.doc'],
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
-      'application/vnd.ms-excel': ['.xls'],
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
-      'application/vnd.ms-powerpoint': ['.ppt'],
-      'application/vnd.openxmlformats-officedocument.presentationml.presentation': ['.pptx'],
-      'text/plain': ['.txt'],
     },
-    maxSize: MAX_FILE_SIZE,
+    maxSize: MAX_FILE_SIZE, // 50MB
     multiple: true,
   });
 
@@ -83,6 +65,7 @@ export default function FileUploader({ onFilesAdded }) {
           bgcolor: isDragActive ? 'action.hover' : 'background.paper',
           border: '2px dashed',
           borderColor: isDragActive ? 'primary.main' : 'divider',
+          borderRadius: 2,
           transition: 'all 0.2s ease',
           '&:hover': {
             borderColor: 'primary.main',
@@ -91,19 +74,20 @@ export default function FileUploader({ onFilesAdded }) {
         }}
       >
         <input {...getInputProps()} />
-        <CloudUploadIcon sx={{ fontSize: 48, color: 'primary.main', mb: 1 }} />
-        <Typography variant="h6" gutterBottom>
-          {isDragActive ? 'Drop files here...' : 'Drag & drop files here'}
+        <CloudUploadIcon sx={{ fontSize: 52, color: 'primary.main', mb: 1 }} />
+        <Typography variant="h6" gutterBottom fontWeight="600">
+          {isDragActive ? 'Drop files here...' : 'Drag & drop your files here'}
         </Typography>
-        <Typography variant="body2" color="text.secondary">
-          or click to browse
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          or click anywhere to browse documents
         </Typography>
-        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 2 }}>
-          Supported: PDF, Images (JPG, PNG), Word, Excel, PowerPoint, Text
-        </Typography>
-        <Typography variant="caption" color="text.secondary">
-          Max file size: 25MB
-        </Typography>
+
+        <Stack direction="row" spacing={1} justifyContent="center" flexWrap="wrap" useFlexGap sx={{ mt: 1 }}>
+          <Chip icon={<PictureAsPdfIcon fontSize="small" />} label="PDF (.pdf)" size="small" variant="outlined" />
+          <Chip icon={<ImageIcon fontSize="small" />} label="Images (.jpg, .png, .webp)" size="small" variant="outlined" />
+          <Chip icon={<DescriptionIcon fontSize="small" />} label="Word (.doc, .docx)" size="small" variant="outlined" />
+          <Chip label="Max 50MB" size="small" color="primary" variant="filled" />
+        </Stack>
       </Paper>
     </Box>
   );

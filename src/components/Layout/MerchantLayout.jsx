@@ -1,5 +1,4 @@
-// src/components/Layout/MerchantLayout.jsx
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import {
   Box, Drawer, AppBar, Toolbar, Typography, List, ListItem, ListItemButton,
@@ -16,7 +15,7 @@ import NotificationsIcon from '@mui/icons-material/Notifications';
 import StorefrontIcon from '@mui/icons-material/Storefront';
 import { useAuth } from '../../hooks/useAuth';
 import { signOutUser } from '../../firebase/auth';
-import { useCollection } from '../../hooks/useFirestore';
+import { supabase } from '../../supabase/client';
 
 const DRAWER_WIDTH = 260;
 
@@ -31,18 +30,40 @@ export default function MerchantLayout() {
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [mobileOpen, setMobileOpen] = useState(false);
   const [anchorEl, setAnchorEl] = useState(null);
+  const [pendingCount, setPendingCount] = useState(0);
   
   const navigate = useNavigate();
   const location = useLocation();
   const { user, userData } = useAuth();
 
-  const { documents: jobs } = useCollection('printJobs', {
-    fieldName: 'merchantId',
-    operator: '==',
-    value: user?.uid,
-  });
+  // Lightweight HEAD count query for menu badge (avoids continuous heavy WebSocket on static layout)
+  const fetchPendingCount = useCallback(async () => {
+    if (!user?.uid) return;
+    try {
+      const { count, error: countErr } = await supabase
+        .from('print_jobs')
+        .select('id', { count: 'exact', head: true })
+        .eq('merchant_id', user.uid)
+        .eq('status', 'pending');
+      if (!countErr && count !== null) {
+        setPendingCount(count);
+      }
+    } catch (e) {
+      console.warn('Could not fetch pending count for badge:', e);
+    }
+  }, [user?.uid]);
 
-  const pendingCount = jobs?.filter(j => j.status === 'pending').length || 0;
+  useEffect(() => {
+    // If merchant is on the dashboard, live Supabase Realtime updates
+    // pendingCount via outletCtx, rendering 30s background polling redundant.
+    if (location.pathname.startsWith('/merchant/dashboard')) {
+      return;
+    }
+
+    fetchPendingCount();
+    const interval = setInterval(fetchPendingCount, 30000);
+    return () => clearInterval(interval);
+  }, [fetchPendingCount, location.pathname]);
 
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
@@ -54,8 +75,13 @@ export default function MerchantLayout() {
   };
 
   const handleLogout = async () => {
-    await signOutUser();
-    navigate('/');
+    try {
+      await signOutUser();
+    } catch (err) {
+      console.error('Sign out error:', err);
+    } finally {
+      navigate('/');
+    }
   };
 
   const drawer = (
@@ -215,7 +241,8 @@ export default function MerchantLayout() {
           mt: { xs: 8, md: 0 },
           minHeight: '100vh',
         }}
-      >        <Outlet />
+      >
+        <Outlet context={{ pendingCount, setPendingCount, refreshPendingCount: fetchPendingCount }} />
       </Box>
     </Box>
   );

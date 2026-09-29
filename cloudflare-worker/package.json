@@ -1,0 +1,10 @@
+{
+  "name": "quickprint-relay",
+  "version": "2.0.0",
+  "private": true,
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev",
+    "types": "wrangler types"
+  }
+}

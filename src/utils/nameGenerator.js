@@ -41,6 +41,32 @@ export const generateSessionId = () => {
   return `user_${timestamp}_${randomPart}`;
 };
 
+// Safe storage fallback for private browsing / incognito mode
+const memoryStore = new Map();
+const safeStorage = {
+  getItem: (key) => {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        return window.localStorage.getItem(key);
+      }
+    } catch (err) {
+      console.warn('localStorage read unavailable, using memory store:', err);
+    }
+    return memoryStore.get(key) || null;
+  },
+  setItem: (key, value) => {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.setItem(key, value);
+        return;
+      }
+    } catch (err) {
+      console.warn('localStorage write unavailable, using memory store:', err);
+    }
+    memoryStore.set(key, value);
+  }
+};
+
 /**
  * Gets or creates a user identity stored in localStorage
  */
@@ -48,7 +74,7 @@ export const getOrCreateUserIdentity = () => {
   const STORAGE_KEY = 'quickprint_user_identity';
   
   // Try to get existing identity
-  const stored = localStorage.getItem(STORAGE_KEY);
+  const stored = safeStorage.getItem(STORAGE_KEY);
   if (stored) {
     try {
       const identity = JSON.parse(stored);
@@ -68,7 +94,7 @@ export const getOrCreateUserIdentity = () => {
     createdAt: new Date().toISOString()
   };
   
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(newIdentity));
+  safeStorage.setItem(STORAGE_KEY, JSON.stringify(newIdentity));
   return newIdentity;
 };
 
@@ -77,7 +103,7 @@ export const getOrCreateUserIdentity = () => {
  */
 export const regenerateUserName = () => {
   const STORAGE_KEY = 'quickprint_user_identity';
-  const stored = localStorage.getItem(STORAGE_KEY);
+  const stored = safeStorage.getItem(STORAGE_KEY);
   
   let identity;
   if (stored) {
@@ -99,6 +125,6 @@ export const regenerateUserName = () => {
     };
   }
   
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(identity));
+  safeStorage.setItem(STORAGE_KEY, JSON.stringify(identity));
   return identity;
 };

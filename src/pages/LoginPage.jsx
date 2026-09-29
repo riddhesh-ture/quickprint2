@@ -7,7 +7,7 @@ import { useAuth } from '../hooks/useAuth';
 
 export default function LoginPage() {
   const navigate = useNavigate();
-  const { user, userData, loading } = useAuth();
+  const { user, userData, loading, authError } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState(null);
@@ -67,7 +67,11 @@ export default function LoginPage() {
             onChange={(e) => setPassword(e.target.value)}
             disabled={isProcessing}
           />
-          {error && <Alert severity="error" sx={{ mt: 2, width: '100%' }}>{error}</Alert>}
+          {(error || (!userData && authError)) && (
+            <Alert severity="error" sx={{ mt: 2, width: '100%' }}>
+              {error || authError}
+            </Alert>
+          )}
           <Button
             type="submit"
             fullWidth

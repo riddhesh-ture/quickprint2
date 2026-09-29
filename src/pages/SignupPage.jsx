@@ -9,14 +9,14 @@ import StorefrontIcon from '@mui/icons-material/Storefront';
 import PersonIcon from '@mui/icons-material/Person';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
 import PaymentIcon from '@mui/icons-material/Payment';
-import { signUpWithEmail } from '../firebase/auth';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from '../firebase/firestore';
+import { signUpMerchant } from '../firebase/auth';
+import { useAuth } from '../hooks/useAuth';
 
 const steps = ['Account', 'Shop Details', 'Payment'];
 
 export default function SignupPage() {
   const navigate = useNavigate();
+  const { refreshProfile } = useAuth();
   const [activeStep, setActiveStep] = useState(0);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -91,24 +91,17 @@ export default function SignupPage() {
     setLoading(true);
 
     try {
-      // Create Firebase Auth account
-      const userCredential = await signUpWithEmail(email, password);
-      const user = userCredential.user;
-
-      // Create merchant profile in Firestore
-      await setDoc(doc(db, 'users', user.uid), {
-        email: email,
-        role: 'merchant',
+      // Create Firebase Auth account and atomic merchant profile in Supabase (single transaction write)
+      const signupRes = await signUpMerchant(email, password, {
         shopName: shopName,
         ownerName: ownerName,
         phone: phone,
         address: address,
         city: city,
         pincode: pincode,
-        upiId: upiId,
+        upiId: upiId ? upiId.trim() : '',
         pricePerPageBW: parseFloat(pricePerPageBW) || 2,
         pricePerPageColor: parseFloat(pricePerPageColor) || 5,
-        createdAt: serverTimestamp(),
         stats: {
           totalPrints: 0,
           totalEarnings: 0,
@@ -118,8 +111,15 @@ export default function SignupPage() {
           monthEarnings: 0,
           lastResetDate: new Date().toISOString().split('T')[0],
           lastResetMonth: new Date().toISOString().slice(0, 7),
-        }
+        },
       });
+
+      // Ensure AuthContext profile is populated with merchant role before navigating
+      const uid = signupRes?.user?.uid || signupRes?.userCredential?.user?.uid;
+      const profile = signupRes?.profile;
+      if (refreshProfile) {
+        await refreshProfile(uid, email, profile);
+      }
 
       navigate('/merchant/dashboard');
     } catch (err) {
@@ -257,7 +257,12 @@ export default function SignupPage() {
               <TextField
                 label="Price per page (B&W)"
                 value={pricePerPageBW}
-                onChange={(e) => setPricePerPageBW(e.target.value.replace(/\D/g, ''))}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === '' || /^\d*\.?\d{0,2}$/.test(val)) {
+                    setPricePerPageBW(val);
+                  }
+                }}
                 fullWidth
                 InputProps={{
                   startAdornment: <InputAdornment position="start">₹</InputAdornment>,
@@ -266,7 +271,12 @@ export default function SignupPage() {
               <TextField
                 label="Price per page (Color)"
                 value={pricePerPageColor}
-                onChange={(e) => setPricePerPageColor(e.target.value.replace(/\D/g, ''))}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === '' || /^\d*\.?\d{0,2}$/.test(val)) {
+                    setPricePerPageColor(val);
+                  }
+                }}
                 fullWidth
                 InputProps={{
                   startAdornment: <InputAdornment position="start">₹</InputAdornment>,

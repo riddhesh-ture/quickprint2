@@ -1,45 +1,29 @@
-// src/firebase/auth.js
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   signOut,
-  onAuthStateChanged,
 } from 'firebase/auth';
-import { auth, db } from './config';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
-
-// --- Helper function to get user role data ---
-export const getUserData = async (uid) => {
-  if (!uid) return null;
-  const userDocRef = doc(db, "users", uid);
-  const userDocSnap = await getDoc(userDocRef);
-  return userDocSnap.exists() ? userDocSnap.data() : null;
-};
-
-// --- User Authentication ---
-export const signUpUser = async (email, password) => {
-  const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-  // After signup, create a role document for them in Firestore
-  await setDoc(doc(db, "users", userCredential.user.uid), {
-    email: userCredential.user.email,
-    role: "user"
-  });
-  return userCredential;
-};
-
-export const signInUser = (email, password) => {
-  return signInWithEmailAndPassword(auth, email, password);
-};
+import { auth } from './config';
+import { upsertMerchantProfile } from '../supabase/db';
 
 // --- Merchant Authentication ---
-export const signUpMerchant = async (email, password) => {
+export const signUpMerchant = async (email, password, profileData = {}) => {
   const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-  // After signup, create a role document for them in Firestore
-  await setDoc(doc(db, "users", userCredential.user.uid), {
-    email: userCredential.user.email,
-    role: "merchant"
-  });
-  return userCredential;
+  try {
+    const profile = await upsertMerchantProfile(userCredential.user.uid, {
+      email: userCredential.user.email,
+      role: 'merchant',
+      ...profileData,
+    });
+    return { userCredential, user: userCredential.user, profile };
+  } catch (err) {
+    try {
+      await userCredential.user.delete();
+    } catch (delErr) {
+      console.error("Failed to delete orphaned Firebase merchant on signup failure:", delErr);
+    }
+    throw err;
+  }
 };
 
 export const signInMerchant = (email, password) => {
@@ -49,13 +33,4 @@ export const signInMerchant = (email, password) => {
 // --- General Sign Out ---
 export const signOutUser = () => {
   return signOut(auth);
-};
-
-export { onAuthStateChanged };
-
-/**
- * Sign up a new user with email and password
- */
-export const signUpWithEmail = (email, password) => {
-  return createUserWithEmailAndPassword(auth, email, password);
 };
