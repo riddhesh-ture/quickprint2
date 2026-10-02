@@ -12,7 +12,7 @@ import {
   Tooltip,
   Collapse,
 } from '@mui/material';
-import RawDeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
+import RawDeleteOutlineIcon from '@mui/icons-material/DeleteOutlined';
 import RawVisibilityIcon from '@mui/icons-material/Visibility';
 import RawPictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
 import RawImageIcon from '@mui/icons-material/Image';
