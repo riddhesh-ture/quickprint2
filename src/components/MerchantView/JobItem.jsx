@@ -32,6 +32,7 @@ export default function JobItem({
   onAcceptJob,
   onCompleteJob,
   onConfirmPayment,
+  onDonePaid,
   onDeleteJob,
   isProcessing,
 }) {
@@ -76,6 +77,9 @@ export default function JobItem({
   }, [job.createdAt]);
 
   const isRealtime = job.transport === 'realtime';
+  const tokenDisplay = job.tokenNumber || (job.dailyToken ? `#${job.dailyToken}-${job.pin || '8421'}` : `#${job.id.slice(-4)}`);
+  const pinDisplay = job.pin || (job.pickupCode ? job.pickupCode.replace(/^P-/, '') : null);
+  const phoneDisplay = job.customerPhone || job.userPhone;
 
   return (
     <ListItem sx={{ flexDirection: 'column', alignItems: 'stretch', borderBottom: '1px solid #eee', py: 1.5 }}>
@@ -84,33 +88,52 @@ export default function JobItem({
           primary={
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
               <Typography variant="subtitle1" fontWeight="bold">
-                🎭 {job.userName || 'Customer'}
+                🎭 {job.userName || job.customerName || 'Customer'}
               </Typography>
-              {job.customerPhone && (
+              <Chip
+                size="small"
+                label={tokenDisplay}
+                sx={{
+                  fontWeight: 800,
+                  bgcolor: '#eff6ff',
+                  color: '#2563eb',
+                  border: '1px solid #bfdbfe',
+                  fontFamily: 'monospace',
+                }}
+              />
+              {pinDisplay && (
                 <Chip
                   size="small"
                   variant="outlined"
-                  label={`📞 ${job.customerPhone}`}
+                  label={`PIN: ${pinDisplay}`}
+                  sx={{ fontWeight: 700, fontFamily: 'monospace' }}
+                />
+              )}
+              {phoneDisplay && (
+                <Chip
+                  size="small"
+                  variant="outlined"
+                  label={`📞 ${phoneDisplay}`}
                   color="default"
                 />
               )}
               <Chip
                 size="small"
                 variant="outlined"
-                label={isRealtime ? '⚡ Real-Time P2P' : '☁️ Cloud Store'}
+                label={isRealtime ? '⚡ P2P Direct' : '☁️ Cloud Queue'}
                 color={isRealtime ? 'success' : 'info'}
               />
               {job.paymentMethod && job.paymentMethod !== 'none' && (
                 <Chip
                   size="small"
                   variant="filled"
-                  label={job.paymentMethod === 'cash' ? '💵 Cash' : '📱 UPI'}
+                  label={job.paymentMethod === 'cash' ? '💵 Cash' : '📱 UPI (Verify SS)'}
                   color={job.paymentMethod === 'cash' ? 'success' : 'primary'}
                 />
               )}
             </Box>
           }
-          secondary={`Received: ${formattedDate} • ${job.files?.length || 0} file(s) • ${job.totalPages || 0} pgs (${job.bwPages || 0} B&W, ${job.colorPages || 0} Color) • ₹${Number(job.cost || job.estimatedCost || 0).toFixed(2)}`}
+          secondary={`Received: ${formattedDate} • ${job.files?.length || 0} file(s) • ${job.totalPages || 1} pgs (${job.bwPages || 0} B&W, ${job.colorPages || 0} Color) • ₹${Number(job.cost || job.estimatedCost || 0).toFixed(2)}`}
         />
 
         <Stack direction="row" spacing={1} alignItems="center">
@@ -168,42 +191,17 @@ export default function JobItem({
             </Button>
           )}
 
-          {/* Status: Awaiting Payment -> Can directly confirm payment */}
-          {job.status === 'awaitingPayment' && (
-            <Button
-              size="small"
-              variant="contained"
-              color="warning"
-              startIcon={<PaymentIcon />}
-              onClick={() => onConfirmPayment ? onConfirmPayment(job.id) : onCompleteJob(job.id)}
-            >
-              Confirm Payment Received
-            </Button>
-          )}
-
-          {/* Status: Payment Claimed -> Confirm Payment Received */}
-          {job.status === 'paymentClaimed' && (
-            <Button
-              size="small"
-              variant="contained"
-              color={job.paymentMethod === 'cash' ? 'success' : 'warning'}
-              startIcon={<PaymentIcon />}
-              onClick={() => onConfirmPayment ? onConfirmPayment(job.id) : onCompleteJob(job.id)}
-            >
-              {job.paymentMethod === 'cash' ? 'Confirm Cash Received' : 'Confirm UPI Received'}
-            </Button>
-          )}
-
-          {/* Status: Paid -> Mark Complete */}
-          {job.status === 'paid' && (
+          {/* 1-Click "Done (Paid)" Action for payment verification and completion */}
+          {(job.status === 'awaitingPayment' || job.status === 'paymentClaimed' || job.status === 'paid') && (
             <Button
               size="small"
               variant="contained"
               color="success"
               startIcon={<CheckCircleIcon />}
-              onClick={() => onCompleteJob(job.id)}
+              onClick={() => onDonePaid ? onDonePaid(job) : (onConfirmPayment ? onConfirmPayment(job.id) : onCompleteJob(job.id))}
+              sx={{ fontWeight: 800 }}
             >
-              Mark Complete
+              Done (Paid)
             </Button>
           )}
 
