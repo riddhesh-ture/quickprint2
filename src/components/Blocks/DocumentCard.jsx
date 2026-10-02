@@ -2,7 +2,7 @@
 import React from 'react';
 import { Box, Typography, IconButton, Tooltip } from '@mui/material';
 import RawDescriptionIcon from '@mui/icons-material/Description';
-import RawDeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
+import RawDeleteOutlineIcon from '@mui/icons-material/DeleteOutlined';
 import RawAutoStoriesIcon from '@mui/icons-material/AutoStories';
 import RawWaterDropIcon from '@mui/icons-material/WaterDrop';
 import RawContentCopyIcon from '@mui/icons-material/ContentCopy';

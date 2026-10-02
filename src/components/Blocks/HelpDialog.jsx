@@ -11,10 +11,10 @@ import {
   IconButton,
 } from '@mui/material';
 import RawCloseIcon from '@mui/icons-material/Close';
-import RawHelpOutlineIcon from '@mui/icons-material/HelpOutline';
+import RawHelpOutlineIcon from '@mui/icons-material/HelpOutlined';
 import RawQrCodeScannerIcon from '@mui/icons-material/QrCodeScanner';
 import RawTuneIcon from '@mui/icons-material/Tune';
-import RawCheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import RawCheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutlined';
 import { unwrapIcon } from '../../utils/iconHelper';
 import { useThemeMode } from '../../context/ThemeContext';
 

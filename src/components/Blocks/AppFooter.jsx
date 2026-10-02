@@ -3,7 +3,7 @@ import React from 'react';
 import { Box, Typography, Button, Link } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import RawShieldOutlinedIcon from '@mui/icons-material/ShieldOutlined';
-import RawHelpOutlineIcon from '@mui/icons-material/HelpOutline';
+import RawHelpOutlineIcon from '@mui/icons-material/HelpOutlined';
 import RawStorefrontIcon from '@mui/icons-material/Storefront';
 import { unwrapIcon } from '../../utils/iconHelper';
 import { useThemeMode } from '../../context/ThemeContext';

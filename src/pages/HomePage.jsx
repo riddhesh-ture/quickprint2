@@ -18,7 +18,7 @@ import RawQrCodeScannerIcon from '@mui/icons-material/QrCodeScanner';
 import RawArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import RawStorefrontIcon from '@mui/icons-material/Storefront';
 import RawCloseIcon from '@mui/icons-material/Close';
-import RawDeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
+import RawDeleteOutlineIcon from '@mui/icons-material/DeleteOutlined';
 import RawHistoryIcon from '@mui/icons-material/History';
 import { unwrapIcon } from '../utils/iconHelper';
 import { useThemeMode } from '../context/ThemeContext';
