@@ -72,6 +72,21 @@ export const completeGoogleMerchantSignup = async (profileData = {}, userOverrid
   return { user: currentUser, profile };
 };
 
+// --- Google Customer Authentication ---
+/**
+ * Isolated Google sign-in strictly for customers (e.g. Print Later).
+ * Strictly avoids querying the public.merchants table and avoids unnecessary network/auth calls.
+ * @returns {Promise<{ userCredential: import('firebase/auth').UserCredential, user: import('firebase/auth').User }>}
+ */
+export const signInCustomerWithGoogle = async () => {
+  const provider = createGoogleProvider();
+  const userCredential = await signInWithPopup(auth, provider);
+  return {
+    userCredential,
+    user: userCredential.user,
+  };
+};
+
 // --- General Sign Out ---
 export const signOutUser = () => {
   return signOut(auth);

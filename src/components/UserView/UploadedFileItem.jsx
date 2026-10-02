@@ -1,36 +1,71 @@
+// src/components/UserView/UploadedFileItem.jsx
 import React from 'react';
 import {
-  Paper, Box, Typography, IconButton, TextField, ToggleButton, ToggleButtonGroup,
-  Divider, Chip, Tooltip, Collapse
+  Paper,
+  Box,
+  Typography,
+  IconButton,
+  TextField,
+  ToggleButton,
+  ToggleButtonGroup,
+  Divider,
+  Tooltip,
+  Collapse,
 } from '@mui/material';
-import DeleteIcon from '@mui/icons-material/Delete';
-import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
-import ImageIcon from '@mui/icons-material/Image';
-import DescriptionIcon from '@mui/icons-material/Description';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import ExpandLessIcon from '@mui/icons-material/ExpandLess';
-import ColorLensIcon from '@mui/icons-material/ColorLens';
-import ContentCopyIcon from '@mui/icons-material/ContentCopy';
-import FlipIcon from '@mui/icons-material/Flip';
-import TuneIcon from '@mui/icons-material/Tune';
+import RawDeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
+import RawVisibilityIcon from '@mui/icons-material/Visibility';
+import RawPictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
+import RawImageIcon from '@mui/icons-material/Image';
+import RawDescriptionIcon from '@mui/icons-material/Description';
+import RawColorLensIcon from '@mui/icons-material/ColorLens';
+import RawContentCopyIcon from '@mui/icons-material/ContentCopy';
+import RawFlipIcon from '@mui/icons-material/Flip';
+import { unwrapIcon } from '../../utils/iconHelper';
+import { formatFileSize } from '../../utils/fileValidation';
 
-const getFileIcon = (fileName) => {
+const DeleteOutlineIcon = unwrapIcon(RawDeleteOutlineIcon);
+const VisibilityIcon = unwrapIcon(RawVisibilityIcon);
+const PictureAsPdfIcon = unwrapIcon(RawPictureAsPdfIcon);
+const ImageIcon = unwrapIcon(RawImageIcon);
+const DescriptionIcon = unwrapIcon(RawDescriptionIcon);
+const ColorLensIcon = unwrapIcon(RawColorLensIcon);
+const ContentCopyIcon = unwrapIcon(RawContentCopyIcon);
+const FlipIcon = unwrapIcon(RawFlipIcon);
+
+const getFileTypeDetails = (fileName) => {
   const ext = fileName.split('.').pop().toLowerCase();
-  if (ext === 'pdf') return <PictureAsPdfIcon color="error" />;
-  if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext)) return <ImageIcon color="primary" />;
-  return <DescriptionIcon color="action" />;
-};
-
-const formatFileSize = (bytes) => {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  if (ext === 'pdf') {
+    return {
+      icon: <PictureAsPdfIcon sx={{ fontSize: 20 }} />,
+      label: 'PDF',
+      bgcolor: '#fee2e2',
+      color: '#dc2626',
+      borderColor: '#fca5a5',
+    };
+  }
+  if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext)) {
+    return {
+      icon: <ImageIcon sx={{ fontSize: 20 }} />,
+      label: 'IMG',
+      bgcolor: '#dbeafe',
+      color: '#2563eb',
+      borderColor: '#bfdbfe',
+    };
+  }
+  return {
+    icon: <DescriptionIcon sx={{ fontSize: 20 }} />,
+    label: 'DOC',
+    bgcolor: '#f3e8ff',
+    color: '#7e22ce',
+    borderColor: '#e9d5ff',
+  };
 };
 
 export default function UploadedFileItem({ fileEntry, onSpecChange, onRemove }) {
   const { file, specs } = fileEntry;
-  // Settings are optional and collapsed by default with standard defaults (1 copy, B&W, 1-sided A4)
   const [expanded, setExpanded] = React.useState(false);
+  const typeDetails = getFileTypeDetails(file.name);
+  const detectedPages = specs.pageCount || 1;
 
   const handleCopiesChange = (e) => {
     const raw = e.target.value;
@@ -51,113 +86,132 @@ export default function UploadedFileItem({ fileEntry, onSpecChange, onRemove }) 
   };
 
   const handlePagesChange = (e) => {
-    // Allow formats: "1-5", "1,3,5", "all", or empty
     const value = e.target.value.replace(/[^0-9,-]/g, '');
     onSpecChange(fileEntry.id, { pages: value });
   };
 
-  const handleColorChange = (e, newValue) => {
-    if (newValue) onSpecChange(fileEntry.id, { color: newValue });
-  };
-
-  const handleSidesChange = (e, newValue) => {
-    if (newValue) onSpecChange(fileEntry.id, { sides: newValue });
-  };
-
-  const handleOrientationChange = (e, newValue) => {
-    if (newValue) onSpecChange(fileEntry.id, { orientation: newValue });
-  };
-
-  const handlePaperSizeChange = (e, newValue) => {
-    if (newValue) onSpecChange(fileEntry.id, { paperSize: newValue });
-  };
-
   return (
-    <Paper elevation={1} sx={{ mb: 2, overflow: 'hidden', border: '1px solid #e0e0e0', borderRadius: 2 }}>
-      {/* Header */}
-      <Box 
-        sx={{ 
-          p: 2, 
-          display: 'flex', 
-          alignItems: 'center', 
+    <Paper
+      elevation={0}
+      sx={{
+        mt: 1.5,
+        borderRadius: '14px',
+        overflow: 'hidden',
+        bgcolor: '#ffffff',
+        border: '1px solid #e2e8f0',
+        boxShadow: '0 1px 3px rgba(15, 23, 42, 0.03)',
+      }}
+    >
+      {/* File Card Header / Preview Bar */}
+      <Box
+        sx={{
+          p: 2,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
           gap: 1.5,
-          bgcolor: expanded ? 'grey.100' : 'grey.50',
-          cursor: 'pointer',
-          transition: 'background-color 0.2s'
         }}
-        onClick={() => setExpanded(!expanded)}
       >
-        {getFileIcon(file.name)}
-        <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-          <Typography variant="subtitle2" noWrap title={file.name} fontWeight="bold">
-            {file.name}
-          </Typography>
-          <Typography variant="caption" color="text.secondary">
-            {formatFileSize(file.size)}
-          </Typography>
-        </Box>
-        
-        {/* Quick specs preview */}
-        <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', alignItems: 'center' }}>
-          {specs.pageCount && specs.pageCount > 1 && (
-            <Chip 
-              size="small" 
-              label={`${specs.pageCount} pages`} 
-              color="info" 
-              variant="outlined" 
-            />
-          )}
-          <Chip 
-            size="small" 
-            label={`${specs.copies || 1} ${specs.copies > 1 ? 'copies' : 'copy'}`} 
-            icon={<ContentCopyIcon sx={{ fontSize: 13 }} />}
-            variant="outlined"
-          />
-          <Chip 
-            size="small" 
-            label={specs.color === 'color' ? 'Color' : 'B&W (Default)'} 
-            color={specs.color === 'color' ? 'primary' : 'default'}
-            variant="outlined"
-          />
-          <Chip 
-            size="small" 
-            label={specs.sides === 'double' ? '2-Sided' : '1-Sided'} 
-            variant="outlined"
-          />
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, minWidth: 0 }}>
+          {/* File Type Pill */}
+          <Box
+            sx={{
+              width: 44,
+              height: 48,
+              borderRadius: '10px',
+              bgcolor: typeDetails.bgcolor,
+              color: typeDetails.color,
+              border: `1px solid ${typeDetails.borderColor}`,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+            }}
+          >
+            {typeDetails.icon}
+            <Typography
+              variant="caption"
+              sx={{
+                fontSize: '8px',
+                fontWeight: 800,
+                textTransform: 'uppercase',
+                letterSpacing: '0.04em',
+                lineHeight: 1,
+                mt: 0.25,
+              }}
+            >
+              {typeDetails.label}
+            </Typography>
+          </Box>
+
+          <Box sx={{ minWidth: 0 }}>
+            <Typography
+              variant="subtitle2"
+              noWrap
+              sx={{
+                fontWeight: 700,
+                color: '#0f172a',
+                fontSize: '0.92rem',
+                fontFamily: '"Plus Jakarta Sans", sans-serif',
+              }}
+              title={file.name}
+            >
+              {file.name}
+            </Typography>
+            <Typography variant="caption" sx={{ color: '#64748b', fontSize: '0.78rem' }}>
+              {formatFileSize(file.size)} •{' '}
+              <strong style={{ color: '#2563eb' }}>
+                {detectedPages} {detectedPages === 1 ? 'page' : 'pages'}
+              </strong>
+            </Typography>
+          </Box>
         </Box>
 
-        <Tooltip title={expanded ? 'Hide settings' : 'Customize settings (Optional)'}>
-          <IconButton size="small" onClick={(e) => { e.stopPropagation(); setExpanded(!expanded); }}>
-            {expanded ? <ExpandLessIcon /> : <TuneIcon fontSize="small" color="action" />}
-          </IconButton>
-        </Tooltip>
-        
-        <Tooltip title="Remove file">
-          <IconButton 
-            size="small" 
-            color="error" 
-            onClick={(e) => { e.stopPropagation(); onRemove(fileEntry.id); }}
-          >
-            <DeleteIcon fontSize="small" />
-          </IconButton>
-        </Tooltip>
+        {/* Action Buttons */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
+          <Tooltip title={expanded ? 'Hide file settings' : 'View file details'}>
+            <IconButton
+              size="small"
+              onClick={() => setExpanded(!expanded)}
+              sx={{
+                color: expanded ? '#2563eb' : '#64748b',
+                '&:hover': { color: '#2563eb', bgcolor: '#eff6ff' },
+              }}
+            >
+              <VisibilityIcon sx={{ fontSize: 20 }} />
+            </IconButton>
+          </Tooltip>
+
+          <Tooltip title="Remove file">
+            <IconButton
+              size="small"
+              onClick={() => onRemove(fileEntry.id)}
+              sx={{
+                color: '#ef4444',
+                '&:hover': { color: '#dc2626', bgcolor: '#fee2e2' },
+              }}
+            >
+              <DeleteOutlineIcon sx={{ fontSize: 20 }} />
+            </IconButton>
+          </Tooltip>
+        </Box>
       </Box>
 
-      {/* Expanded Settings */}
+      {/* Expanded Per-file Customization Drawer */}
       <Collapse in={expanded}>
-        <Divider />
-        <Box sx={{ p: 2, bgcolor: '#fafafa' }}>
-          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
-            ⚙️ <strong>Optional Settings</strong>: Default is 1 copy, Black & White, all pages, 1-sided A4. Change only if needed.
+        <Divider sx={{ borderColor: '#e2e8f0' }} />
+        <Box sx={{ p: 2, bgcolor: '#f8faff' }}>
+          <Typography variant="caption" sx={{ color: '#64748b', display: 'block', mb: 1.5, fontWeight: 600 }}>
+            ⚙️ <strong>Per-file override</strong>: Leave unchanged to use job-wide settings.
           </Typography>
 
-          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(4, 1fr)' }, gap: 2 }}>
-            
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1.5 }}>
             {/* Copies */}
             <Box>
-              <Typography variant="caption" color="text.secondary" gutterBottom display="block">
-                <ContentCopyIcon sx={{ fontSize: 14, mr: 0.5, verticalAlign: 'middle' }} />
-                Copies (Default: 1)
+              <Typography variant="caption" sx={{ color: '#334155', fontWeight: 600, display: 'block', mb: 0.5 }}>
+                <ContentCopyIcon sx={{ fontSize: 13, mr: 0.5, verticalAlign: 'middle' }} />
+                Copies for this file
               </Typography>
               <TextField
                 type="number"
@@ -170,30 +224,30 @@ export default function UploadedFileItem({ fileEntry, onSpecChange, onRemove }) 
               />
             </Box>
 
-            {/* Pages */}
+            {/* Custom page interval */}
             <Box>
-              <Typography variant="caption" color="text.secondary" gutterBottom display="block">
-                Pages (leave empty for all)
+              <Typography variant="caption" sx={{ color: '#334155', fontWeight: 600, display: 'block', mb: 0.5 }}>
+                Specific pages (e.g. 1-3, 5)
               </Typography>
               <TextField
                 size="small"
                 value={specs.pages || ''}
                 onChange={handlePagesChange}
-                placeholder="e.g., 1-5 or 1,3,5"
+                placeholder="Leave blank for all"
                 fullWidth
               />
             </Box>
 
             {/* Color Mode */}
             <Box>
-              <Typography variant="caption" color="text.secondary" gutterBottom display="block">
-                <ColorLensIcon sx={{ fontSize: 14, mr: 0.5, verticalAlign: 'middle' }} />
-                Color
+              <Typography variant="caption" sx={{ color: '#334155', fontWeight: 600, display: 'block', mb: 0.5 }}>
+                <ColorLensIcon sx={{ fontSize: 13, mr: 0.5, verticalAlign: 'middle' }} />
+                Color Mode
               </Typography>
               <ToggleButtonGroup
                 value={specs.color || 'bw'}
                 exclusive
-                onChange={handleColorChange}
+                onChange={(_, val) => val && onSpecChange(fileEntry.id, { color: val })}
                 size="small"
                 fullWidth
               >
@@ -202,56 +256,21 @@ export default function UploadedFileItem({ fileEntry, onSpecChange, onRemove }) 
               </ToggleButtonGroup>
             </Box>
 
-            {/* Sides */}
+            {/* Print sides */}
             <Box>
-              <Typography variant="caption" color="text.secondary" gutterBottom display="block">
-                <FlipIcon sx={{ fontSize: 14, mr: 0.5, verticalAlign: 'middle' }} />
+              <Typography variant="caption" sx={{ color: '#334155', fontWeight: 600, display: 'block', mb: 0.5 }}>
+                <FlipIcon sx={{ fontSize: 13, mr: 0.5, verticalAlign: 'middle' }} />
                 Print Sides
               </Typography>
               <ToggleButtonGroup
-                value={specs.sides || 'single'}
+                value={specs.sides || 'double'}
                 exclusive
-                onChange={handleSidesChange}
+                onChange={(_, val) => val && onSpecChange(fileEntry.id, { sides: val })}
                 size="small"
                 fullWidth
               >
-                <ToggleButton value="single">1-Sided</ToggleButton>
                 <ToggleButton value="double">2-Sided</ToggleButton>
-              </ToggleButtonGroup>
-            </Box>
-
-            {/* Paper Size */}
-            <Box>
-              <Typography variant="caption" color="text.secondary" gutterBottom display="block">
-                Paper Size
-              </Typography>
-              <ToggleButtonGroup
-                value={specs.paperSize || 'a4'}
-                exclusive
-                onChange={handlePaperSizeChange}
-                size="small"
-                fullWidth
-              >
-                <ToggleButton value="a4">A4</ToggleButton>
-                <ToggleButton value="a3">A3</ToggleButton>
-                <ToggleButton value="letter">Letter</ToggleButton>
-              </ToggleButtonGroup>
-            </Box>
-
-            {/* Orientation */}
-            <Box>
-              <Typography variant="caption" color="text.secondary" gutterBottom display="block">
-                Orientation
-              </Typography>
-              <ToggleButtonGroup
-                value={specs.orientation || 'portrait'}
-                exclusive
-                onChange={handleOrientationChange}
-                size="small"
-                fullWidth
-              >
-                <ToggleButton value="portrait">Portrait</ToggleButton>
-                <ToggleButton value="landscape">Landscape</ToggleButton>
+                <ToggleButton value="single">1-Sided</ToggleButton>
               </ToggleButtonGroup>
             </Box>
           </Box>
