@@ -194,22 +194,52 @@ export function calculateBillablePages(totalDocumentPages = 1, pagesSpec = '') {
 }
 
 /**
- * Accurately detect the page count of a PDF file using binary inspection and fallback
+ * Comprehensive PDF inspection:
+ * - Detects password protection / encryption (/Encrypt or PasswordException)
+ * - Detects accurate page count
+ * - Detects structural corruption
+ * Invariant: strict URL.revokeObjectURL cleanup for low-spec RAM envelope
+ *
  * @param {File|Blob} file
- * @returns {Promise<number>}
+ * @returns {Promise<{ pageCount: number, isEncrypted: boolean, isCorrupted: boolean, error: string|null }>}
  */
-export async function getPdfPageCount(file) {
-  if (!file) return 1;
+export async function inspectPdfFile(file) {
+  if (!file) {
+    return { pageCount: 1, isEncrypted: false, isCorrupted: false, error: null };
+  }
+
+  const category = getFileCategory(file);
+  if (category !== 'pdf') {
+    return { pageCount: 1, isEncrypted: false, isCorrupted: false, error: null };
+  }
 
   try {
     const decoder = new TextDecoder('latin1');
     const fileSize = file.size || 0;
 
+    // Check header signature
+    const headerSlice = file.slice(0, Math.min(fileSize, 1024));
+    const headerBuf = await headerSlice.arrayBuffer();
+    const headerText = decoder.decode(new Uint8Array(headerBuf));
+    if (!headerText.includes('%PDF-')) {
+      return {
+        pageCount: 1,
+        isEncrypted: false,
+        isCorrupted: true,
+        error: 'Not a valid PDF document. Please verify the file.'
+      };
+    }
+
     // Fast-path 1: Check header and trailer chunks (first 64KB & last 64KB)
-    // Avoids loading 50MB into memory strings
+    let detectedPages = null;
+    let hasEncryptFlag = false;
+
     const checkChunk = async (blobSlice) => {
       const buf = await blobSlice.arrayBuffer();
       const text = decoder.decode(new Uint8Array(buf));
+      if (/\/Encrypt\b/.test(text)) {
+        hasEncryptFlag = true;
+      }
       const countMatches = [...text.matchAll(/\/Type\s*\/Pages[\s\S]{0,1000}?\/Count\s+(\d+)/g)];
       if (countMatches.length > 0) {
         const counts = countMatches
@@ -220,29 +250,31 @@ export async function getPdfPageCount(file) {
       return null;
     };
 
-    // Check first 64KB
     const startSlice = file.slice(0, Math.min(fileSize, 65536));
-    let detected = await checkChunk(startSlice);
-    if (detected && detected > 0) return detected;
+    detectedPages = await checkChunk(startSlice);
 
-    // Check last 64KB if file is larger than 64KB
     if (fileSize > 65536) {
       const endSlice = file.slice(Math.max(0, fileSize - 65536), fileSize);
-      detected = await checkChunk(endSlice);
-      if (detected && detected > 0) return detected;
-    }
-
-    // Fast-path 2: If small file (<= 512KB), inspect full text
-    if (fileSize <= 524288) {
-      const fullBuf = await file.arrayBuffer();
-      const fullText = decoder.decode(new Uint8Array(fullBuf));
-      const pageMatches = fullText.match(/\/Type\s*\/Page\b/g);
-      if (pageMatches && pageMatches.length > 0) {
-        return pageMatches.length;
+      const endDetected = await checkChunk(endSlice);
+      if (endDetected && endDetected > (detectedPages || 0)) {
+        detectedPages = endDetected;
       }
     }
 
-    // High-accuracy fallback: PDF.js streaming via Object URL (zero full-string allocations)
+    // Fast-path 2: Small file full text inspection
+    if (!detectedPages && fileSize <= 524288) {
+      const fullBuf = await file.arrayBuffer();
+      const fullText = decoder.decode(new Uint8Array(fullBuf));
+      if (/\/Encrypt\b/.test(fullText)) {
+        hasEncryptFlag = true;
+      }
+      const pageMatches = fullText.match(/\/Type\s*\/Page\b/g);
+      if (pageMatches && pageMatches.length > 0) {
+        detectedPages = pageMatches.length;
+      }
+    }
+
+    // High-accuracy PDF.js verification in browser environment
     if (typeof window !== 'undefined') {
       try {
         if (!window.pdfjsLib) {
@@ -271,22 +303,74 @@ export async function getPdfPageCount(file) {
             'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
           const fileUrl = URL.createObjectURL(file);
           try {
-            const loadingTask = window.pdfjsLib.getDocument(fileUrl);
+            const loadingTask = window.pdfjsLib.getDocument({
+              url: fileUrl,
+              stopAtErrors: true,
+            });
             const pdfDoc = await loadingTask.promise;
             const numPages = pdfDoc.numPages || 1;
             loadingTask.destroy();
-            return numPages;
+            return {
+              pageCount: numPages,
+              isEncrypted: false,
+              isCorrupted: false,
+              error: null,
+            };
+          } catch (pdfErr) {
+            const errName = pdfErr?.name || '';
+            const errMsg = String(pdfErr?.message || '');
+            if (errName === 'PasswordException' || errMsg.includes('password') || hasEncryptFlag) {
+              return {
+                pageCount: 1,
+                isEncrypted: true,
+                isCorrupted: false,
+                error: 'Password-protected PDF. Please unlock the file before uploading.',
+              };
+            }
+            if (errName === 'InvalidPDFException' || errMsg.includes('Invalid PDF structure')) {
+              return {
+                pageCount: 1,
+                isEncrypted: false,
+                isCorrupted: true,
+                error: 'Corrupted or unreadable PDF document.',
+              };
+            }
           } finally {
             URL.revokeObjectURL(fileUrl);
           }
         }
       } catch (pdfErr) {
-        console.warn('PDF.js streaming fallback error:', pdfErr);
+        console.warn('PDF.js inspection notice:', pdfErr);
       }
     }
-  } catch (err) {
-    console.warn('Error detecting PDF page count:', err);
-  }
 
-  return 1;
+    if (hasEncryptFlag) {
+      return {
+        pageCount: 1,
+        isEncrypted: true,
+        isCorrupted: false,
+        error: 'Password-protected PDF. Please unlock the file before uploading.',
+      };
+    }
+
+    return {
+      pageCount: detectedPages || 1,
+      isEncrypted: false,
+      isCorrupted: false,
+      error: null,
+    };
+  } catch (err) {
+    console.warn('Error inspecting PDF:', err);
+    return { pageCount: 1, isEncrypted: false, isCorrupted: false, error: null };
+  }
+}
+
+/**
+ * Accurately detect the page count of a PDF file using binary inspection and fallback
+ * @param {File|Blob} file
+ * @returns {Promise<number>}
+ */
+export async function getPdfPageCount(file) {
+  const result = await inspectPdfFile(file);
+  return result.pageCount || 1;
 }

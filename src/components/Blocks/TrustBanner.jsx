@@ -63,7 +63,7 @@ export default function TrustBanner({
             lineHeight: 1.4,
           }}
         >
-          Files stream peer-to-peer into merchant printer memory and are purged immediately. Zero PDF storage in cloud databases.
+          Your documents transfer directly to the printer and are deleted immediately after printing. Never saved or stored.
         </Typography>
       </Box>
 

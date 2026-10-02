@@ -120,7 +120,7 @@ export default function JobItem({
               <Chip
                 size="small"
                 variant="outlined"
-                label={isRealtime ? '⚡ P2P Direct' : '☁️ Cloud Queue'}
+                label={isRealtime ? '⚡ Direct' : '📄 Standard'}
                 color={isRealtime ? 'success' : 'info'}
               />
               {job.paymentMethod && job.paymentMethod !== 'none' && (

@@ -38,6 +38,7 @@ lerna-debug.log*
 # Project-local planning / verification artifacts
 PROGRESS.md
 plan.md
+report.md
 QUICKPRINT_FINAL_MASTER_PLAN.md
 user-flow/
 tests/

@@ -109,7 +109,7 @@ export default function LoginPage() {
           Merchant Login
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, mb: 1 }}>
-          Sign in to manage your QuickPrint print queue
+          Sign in to manage your QuickPrint print station
         </Typography>
 
         {notice && (

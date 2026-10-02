@@ -106,7 +106,7 @@ export default function AppFooter({
             lineHeight: 1.4,
           }}
         >
-          QuickPrint 2.0 • Ultra-fast P2P Kiosk Printing • Zero PDF cloud storage
+          QuickPrint • Fast, Private Counter Printing • Zero Document Retention
         </Typography>
       </Box>
     </Box>

@@ -29,6 +29,9 @@ export default function DocumentCard({
   copies = 1,
   duplex = true,
   isDemo = false,
+  isAnalyzing = false,
+  error = null,
+  pageRange,
   onRemove,
   action,
 }) {
@@ -122,24 +125,66 @@ export default function DocumentCard({
 
       {/* Badges Row */}
       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
-        <Box
-          sx={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 0.5,
-            px: 1,
-            py: 0.3,
-            borderRadius: '6px',
-            bgcolor: isDark ? 'rgba(255,255,255,0.06)' : '#ffffff',
-            border: `1px solid ${colors.border}`,
-            color: colors.textSecondary,
-            fontSize: '0.75rem',
-            fontWeight: 600,
-          }}
-        >
-          <AutoStoriesIcon sx={{ fontSize: 13, color: colors.primary }} />
-          <span>{pageCount} {pageCount === 1 ? 'Page' : 'Pages'}</span>
-        </Box>
+        {error ? (
+          <Box
+            sx={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 0.5,
+              px: 1,
+              py: 0.3,
+              borderRadius: '6px',
+              bgcolor: isDark ? 'rgba(239,68,68,0.18)' : '#fee2e2',
+              border: '1px solid #fca5a5',
+              color: isDark ? '#fca5a5' : '#b91c1c',
+              fontSize: '0.75rem',
+              fontWeight: 700,
+            }}
+          >
+            <span>⚠️ {error}</span>
+          </Box>
+        ) : isAnalyzing ? (
+          <Box
+            sx={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 0.5,
+              px: 1,
+              py: 0.3,
+              borderRadius: '6px',
+              bgcolor: isDark ? 'rgba(37,99,235,0.15)' : '#eff6ff',
+              border: `1px solid ${colors.border}`,
+              color: colors.primary,
+              fontSize: '0.75rem',
+              fontWeight: 700,
+            }}
+          >
+            <span>⏳ Counting pages...</span>
+          </Box>
+        ) : (
+          <Box
+            sx={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 0.5,
+              px: 1,
+              py: 0.3,
+              borderRadius: '6px',
+              bgcolor: isDark ? 'rgba(255,255,255,0.06)' : '#ffffff',
+              border: `1px solid ${colors.border}`,
+              color: colors.textSecondary,
+              fontSize: '0.75rem',
+              fontWeight: 600,
+            }}
+          >
+            <AutoStoriesIcon sx={{ fontSize: 13, color: colors.primary }} />
+            <span>
+              {pageRange && pageRange !== 'all'
+                ? `Pages: ${pageRange} (${pageCount} total)`
+                : `${pageCount} ${pageCount === 1 ? 'Page' : 'Pages'}`}
+            </span>
+          </Box>
+        )}
 
         <Box
           sx={{

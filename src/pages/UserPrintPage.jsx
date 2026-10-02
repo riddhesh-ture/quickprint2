@@ -19,6 +19,7 @@ import FileUploader from '../components/UserView/FileUploader';
 import { getMerchantProfile, generatePrintJobId, createPrintJobWithId } from '../supabase/db';
 import { getOrCreateUserIdentity } from '../utils/nameGenerator';
 import { realtimeRelay } from '../utils/realtimeRelay';
+import { inspectPdfFile, calculateBillablePages } from '../utils/fileValidation';
 
 const AddIcon = unwrapIcon(RawAddIcon);
 const RemoveIcon = unwrapIcon(RawRemoveIcon);
@@ -68,36 +69,91 @@ export default function UserPrintPage() {
     }
   }, [merchantId]);
 
-  // Handle adding new files
-  const handleFilesAdded = (newRawFiles) => {
-    const formatted = newRawFiles.map((f, i) => ({
-      id: `${Date.now()}-${i}-${f.name}`,
-      file: f,
-      specs: { copies: 1, color: colorMode, sides: duplex ? 'double' : 'single', pageCount: 1 },
-      isDemo: false,
-    }));
+  // Handle adding new files with asynchronous page counting & validation
+  const handleFilesAdded = async (newRawFiles) => {
+    const formatted = newRawFiles.map((f, i) => {
+      const isPdf = f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf');
+      return {
+        id: `${Date.now()}-${i}-${f.name}`,
+        file: f,
+        specs: { copies: 1, color: colorMode, sides: duplex ? 'double' : 'single', pageCount: 1, pages: 'all' },
+        isDemo: false,
+        isAnalyzing: isPdf,
+        error: null,
+      };
+    });
+
     setFiles((prev) => [...prev.filter((item) => !item.isDemo), ...formatted]);
+
+    // Inspect each PDF asynchronously
+    for (const item of formatted) {
+      const isPdf = item.file.type === 'application/pdf' || item.file.name.toLowerCase().endsWith('.pdf');
+      if (isPdf) {
+        try {
+          const inspection = await inspectPdfFile(item.file);
+          setFiles((prev) =>
+            prev.map((f) => {
+              if (f.id === item.id) {
+                return {
+                  ...f,
+                  isAnalyzing: false,
+                  specs: {
+                    ...f.specs,
+                    pageCount: inspection.pageCount || 1,
+                  },
+                  error: inspection.error || null,
+                };
+              }
+              return f;
+            })
+          );
+        } catch {
+          setFiles((prev) =>
+            prev.map((f) => (f.id === item.id ? { ...f, isAnalyzing: false } : f))
+          );
+        }
+      }
+    }
   };
 
   const handleRemoveFile = (indexToRemove) => {
     setFiles((prev) => prev.filter((_, idx) => idx !== indexToRemove));
   };
 
-  // Pricing calculations
+  // Pricing calculations using actual detected billable pages
   const priceBW = merchantProfile?.pricePerPageBW ?? 2;
   const priceColor = merchantProfile?.pricePerPageColor ?? 5;
 
+  const hasFileErrors = useMemo(() => files.some((f) => Boolean(f.error)), [files]);
+  const isAnyFileAnalyzing = useMemo(() => files.some((f) => Boolean(f.isAnalyzing)), [files]);
+
   const { totalPagesCount, estimatedCost } = useMemo(() => {
-    const pages = files.reduce((acc, f) => acc + (f.specs?.pageCount || 1), 0);
+    const pages = files.reduce((acc, f) => {
+      const docPages = f.specs?.pageCount || 1;
+      const billable = f.specs?.pages && f.specs.pages !== 'all'
+        ? calculateBillablePages(docPages, f.specs.pages)
+        : docPages;
+      return acc + billable;
+    }, 0);
     const rate = colorMode === 'color' ? priceColor : priceBW;
     const cost = pages * rate * copies;
     return { totalPagesCount: pages, estimatedCost: cost.toFixed(2) };
   }, [files, colorMode, copies, priceBW, priceColor]);
 
-  // Submission Flow (Mode 1 P2P Stream + DB metadata)
+  // Submission Flow (Direct Transfer + DB metadata)
   const handlePrintSubmission = async () => {
     if (files.length === 0) {
       setSubmitError('Please upload at least one document to print.');
+      return;
+    }
+
+    if (hasFileErrors) {
+      setSubmitError('Please remove or fix invalid documents before proceeding.');
+      return;
+    }
+
+    if (isAnyFileAnalyzing) {
+      setSubmitError('Please wait while page counts are being verified.');
       return;
     }
 
@@ -211,6 +267,9 @@ export default function UserPrintPage() {
                 copies={copies}
                 duplex={duplex}
                 isDemo={item.isDemo}
+                isAnalyzing={item.isAnalyzing}
+                error={item.error}
+                pageRange={item.specs?.pages}
                 onRemove={() => handleRemoveFile(idx)}
               />
             ))}
@@ -279,9 +338,9 @@ export default function UserPrintPage() {
       <StickyActionDock
         priceText={`₹${estimatedCost}`}
         badge={`${totalPagesCount} ${totalPagesCount === 1 ? 'Page' : 'Pages'}`}
-        primaryLabel={isSubmitting ? 'Sending...' : 'Proceed to Payment'}
+        primaryLabel={isSubmitting ? 'Sending...' : isAnyFileAnalyzing ? 'Checking Pages...' : 'Proceed to Payment'}
         onPrimaryClick={handlePrintSubmission}
-        disabled={files.length === 0 || isSubmitting}
+        disabled={files.length === 0 || isSubmitting || hasFileErrors || isAnyFileAnalyzing}
         loading={isSubmitting}
       />
     </Box>

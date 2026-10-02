@@ -123,13 +123,13 @@ export default function HomePage() {
 
   return (
     <Box sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', bgcolor: isDark ? colors.bg : '#faf8ff' }}>
-      <AppHeader title="QuickPrint" subtitle="Zero-Memory Kiosk Printing" />
+      <AppHeader title="QuickPrint" subtitle="Fast & Private Printing" />
 
       <Container maxWidth="xs" sx={{ py: 3, flex: 1, display: 'flex', flexDirection: 'column', gap: 2.5 }}>
         {/* 1. Hero Hub Card: Enter Shop Code or Scan QR */}
         <PrintCard
           title="Print Instantly"
-          subtitle="Enter 6-character shop code or scan kiosk QR"
+          subtitle="Enter 6-character shop code or scan counter QR"
           elevation
           sx={{ textAlign: 'center' }}
         >
@@ -251,7 +251,7 @@ export default function HomePage() {
             onClick={() => { setScannerOpen(false); handleSelectShop(DEFAULT_DEMO_SHOP); }}
             sx={{ textTransform: 'none', fontWeight: 700 }}
           >
-            Simulate Station QR Scan
+            Simulate Counter QR Scan
           </Button>
         </DialogContent>
       </Dialog>

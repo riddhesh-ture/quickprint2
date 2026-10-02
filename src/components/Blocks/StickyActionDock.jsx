@@ -32,7 +32,8 @@ export default function StickyActionDock({
         backdropFilter: 'blur(12px)',
         borderTop: `1px solid ${colors.border}`,
         boxShadow: isDark ? '0 -4px 20px rgba(0,0,0,0.4)' : '0 -4px 20px rgba(15,23,42,0.06)',
-        py: { xs: 1.5, sm: 2 },
+        pt: { xs: 1.5, sm: 2 },
+        pb: { xs: 'calc(14px + env(safe-area-inset-bottom, 0px))', sm: 2 },
         px: { xs: 2, sm: 3 },
         transition: 'all 0.2s ease',
       }}
@@ -121,9 +122,13 @@ export default function StickyActionDock({
               fontFamily: '"Plus Jakarta Sans", sans-serif',
               boxShadow: '0 4px 14px rgba(37,99,235,0.3)',
               minHeight: '48px',
+              transition: 'all 0.15s cubic-bezier(0.4, 0, 0.2, 1)',
               '&:hover': {
                 bgcolor: colors.primaryHover,
                 boxShadow: '0 6px 20px rgba(37,99,235,0.4)',
+              },
+              '&:active': {
+                transform: 'scale(0.98)',
               },
               '&:disabled': {
                 bgcolor: isDark ? 'rgba(255,255,255,0.12)' : '#e2e8f0',

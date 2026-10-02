@@ -68,9 +68,45 @@ export default function OrderReceiptPendingPage() {
   const [privacyOpen, setPrivacyOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
 
-  // Supabase Realtime CDC subscription for in-place green flip
+  // Supabase Realtime CDC subscription + Polling fallback for in-place green flip
   useEffect(() => {
     if (!jobId || !supabase) return;
+
+    let isMounted = true;
+
+    const checkLatestStatus = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('print_jobs')
+          .select('status')
+          .eq('id', jobId)
+          .single();
+
+        if (!error && data?.status && isMounted) {
+          if (['completed', 'printing', 'paymentClaimed', 'paid'].includes(data.status)) {
+            setStatus(data.status);
+          }
+        }
+      } catch (err) {
+        // Silent catch for network drops
+      }
+    };
+
+    // Initial check
+    checkLatestStatus();
+
+    // Visibility change handler (tab switch / mobile screen unlock)
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        checkLatestStatus();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    // Fallback polling interval (every 4 seconds until completed)
+    const intervalId = setInterval(() => {
+      checkLatestStatus();
+    }, 4000);
 
     const channel = supabase
       .channel(`receipt-status-${jobId}`)
@@ -92,6 +128,9 @@ export default function OrderReceiptPendingPage() {
       .subscribe();
 
     return () => {
+      isMounted = false;
+      clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', handleVisibility);
       try { supabase.removeChannel(channel); } catch {}
     };
   }, [jobId]);
@@ -107,7 +146,7 @@ export default function OrderReceiptPendingPage() {
 
   return (
     <Box sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', bgcolor: isDark ? colors.bg : '#faf8ff' }}>
-      <AppHeader title="Print Receipt" showBack backTo="/" />
+      <AppHeader title="QuickPrint" subtitle="Receipt" showBack backTo="/" />
 
       <Container maxWidth="xs" sx={{ py: 3, flex: 1, display: 'flex', flexDirection: 'column', gap: 2.25 }}>
         {/* 1. Realtime Status Banner (In-place Green Flip) */}
@@ -163,7 +202,7 @@ export default function OrderReceiptPendingPage() {
                 : isPrinting
                 ? 'The printer is actively printing your document.'
                 : order.paymentMethod === 'upi'
-                ? 'Show your Token # and UPI payment screenshot to the attendant for instant job release.'
+                ? 'Show your Pickup Token and payment screenshot to the attendant for instant job release.'
                 : `Pay ₹${order.amount} in cash to the attendant upon pickup.`}
             </Typography>
           </Box>
@@ -185,11 +224,25 @@ export default function OrderReceiptPendingPage() {
               px: 3,
               py: 1.25,
               borderRadius: '14px',
-              bgcolor: isDark ? 'rgba(37,99,235,0.15)' : '#eff6ff',
-              border: `2px dashed ${colors.primary}`,
-              color: colors.primary,
+              bgcolor: isCompleted
+                ? (isDark ? 'rgba(16, 185, 129, 0.15)' : '#ecfdf5')
+                : (isDark ? 'rgba(37, 99, 235, 0.15)' : '#eff6ff'),
+              border: isCompleted
+                ? '2px solid #10b981'
+                : `2px dashed ${colors.primary}`,
+              color: isCompleted ? '#10b981' : colors.primary,
               cursor: 'pointer',
               userSelect: 'none',
+              transition: 'all 0.3s ease',
+              animation: !isCompleted ? 'receiptPulse 2.4s infinite ease-in-out' : 'none',
+              '@keyframes receiptPulse': {
+                '0%': { boxShadow: '0 0 0 0 rgba(37, 99, 235, 0.3)' },
+                '70%': { boxShadow: '0 0 0 8px rgba(37, 99, 235, 0)' },
+                '100%': { boxShadow: '0 0 0 0 rgba(37, 99, 235, 0)' },
+              },
+              '&:active': {
+                transform: 'scale(0.97)',
+              },
             }}
             onClick={handleCopyToken}
           >
@@ -210,6 +263,28 @@ export default function OrderReceiptPendingPage() {
                 {copied ? <CheckIcon sx={{ fontSize: 20, color: '#10b981' }} /> : <ContentCopyIcon sx={{ fontSize: 18 }} />}
               </Box>
             </Tooltip>
+          </Box>
+
+          <Box sx={{ mt: 1, mb: 1, display: 'flex', justifyContent: 'center' }}>
+            <Box
+              sx={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 0.75,
+                px: 1.5,
+                py: 0.35,
+                borderRadius: 999,
+                bgcolor: order.paymentMethod === 'upi'
+                  ? (isDark ? 'rgba(37,99,235,0.15)' : '#eff6ff')
+                  : (isDark ? 'rgba(16,185,129,0.15)' : '#ecfdf5'),
+                color: order.paymentMethod === 'upi' ? colors.primary : '#10b981',
+                fontSize: '0.78rem',
+                fontWeight: 700,
+                border: `1px solid ${order.paymentMethod === 'upi' ? (isDark ? 'rgba(37,99,235,0.3)' : '#bfdbfe') : (isDark ? 'rgba(16,185,129,0.3)' : '#a7f3d0')}`,
+              }}
+            >
+              <span>{order.paymentMethod === 'upi' ? '📱 UPI (Show Screenshot at Counter)' : '💵 Cash at Counter'}</span>
+            </Box>
           </Box>
 
           <Typography variant="body2" sx={{ color: colors.textSecondary, fontSize: '0.82rem' }}>
@@ -273,7 +348,7 @@ export default function OrderReceiptPendingPage() {
               '&:hover': { bgcolor: colors.primaryHover },
             }}
           >
-            Print Another
+            Print Another Document
           </Button>
         </Box>
 
