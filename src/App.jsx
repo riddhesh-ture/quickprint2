@@ -2,6 +2,7 @@
 import React, { Suspense, lazy } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { Box, CircularProgress } from '@mui/material';
+import { ThemeContextProvider } from './context/ThemeContext';
 
 // Lazy-loaded Pages for code-splitting
 const HomePage = lazy(() => import('./pages/HomePage'));
@@ -30,7 +31,8 @@ const RouteLoader = () => (
 
 export default function App() {
   return (
-    <Suspense fallback={<RouteLoader />}>
+    <ThemeContextProvider>
+      <Suspense fallback={<RouteLoader />}>
       <Routes>
         {/* Public Routes - Zero Firebase / Zero Blocking Spinners */}
         <Route path="/" element={<HomePage />} />
@@ -56,5 +58,6 @@ export default function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Suspense>
+    </ThemeContextProvider>
   );
 }
