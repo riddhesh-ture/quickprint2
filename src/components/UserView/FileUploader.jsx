@@ -1,17 +1,19 @@
 // src/components/UserView/FileUploader.jsx
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { Box, Typography, Paper, Alert } from '@mui/material';
 import RawUploadFileIcon from '@mui/icons-material/UploadFile';
 import RawAddIcon from '@mui/icons-material/Add';
 import { unwrapIcon } from '../../utils/iconHelper';
 import { MAX_FILE_SIZE } from '../../utils/fileValidation';
+import { useThemeMode } from '../../context/ThemeContext';
 
 const UploadFileIcon = unwrapIcon(RawUploadFileIcon);
 const AddIcon = unwrapIcon(RawAddIcon);
 
 export default function FileUploader({ onFilesAdded, hasFiles = false }) {
-  const [error, setError] = React.useState(null);
+  const [error, setError] = useState(null);
+  const { isDark, colors } = useThemeMode();
 
   const onDrop = useCallback((acceptedFiles, rejectedFiles) => {
     setError(null);
@@ -55,7 +57,7 @@ export default function FileUploader({ onFilesAdded, hasFiles = false }) {
       {error && (
         <Alert
           severity="error"
-          sx={{ mb: 2, borderRadius: 2 }}
+          sx={{ mb: 2, borderRadius: '12px' }}
           onClose={() => setError(null)}
         >
           {error}
@@ -68,15 +70,20 @@ export default function FileUploader({ onFilesAdded, hasFiles = false }) {
         sx={{
           p: { xs: 2.75, sm: 3.5 },
           borderRadius: '16px',
-          bgcolor: isDragActive ? '#eff6ff' : '#f8faff',
+          bgcolor: isDragActive
+            ? (isDark ? 'rgba(37, 99, 235, 0.16)' : '#eff6ff')
+            : (isDark ? colors.surface : '#f8faff'),
           border: '2px dashed',
-          borderColor: isDragActive ? '#2563eb' : '#93c5fd',
+          borderColor: isDragActive
+            ? colors.primary
+            : (isDark ? 'rgba(255, 255, 255, 0.16)' : '#93c5fd'),
           textAlign: 'center',
           cursor: 'pointer',
-          transition: 'all 0.2s ease',
+          transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+          transform: isDragActive ? 'scale(1.01)' : 'none',
           '&:hover': {
-            borderColor: '#2563eb',
-            bgcolor: '#eff6ff',
+            borderColor: colors.primary,
+            bgcolor: isDark ? 'rgba(37, 99, 235, 0.12)' : '#eff6ff',
           },
         }}
       >
@@ -86,7 +93,7 @@ export default function FileUploader({ onFilesAdded, hasFiles = false }) {
             width: 52,
             height: 52,
             borderRadius: '50%',
-            bgcolor: '#2563eb',
+            bgcolor: colors.primary,
             color: '#ffffff',
             display: 'flex',
             alignItems: 'center',
@@ -103,16 +110,16 @@ export default function FileUploader({ onFilesAdded, hasFiles = false }) {
           variant="subtitle1"
           sx={{
             fontWeight: 800,
-            color: '#0f172a',
+            color: colors.text,
             fontSize: '1.05rem',
-            fontFamily: '"Newsreader", Georgia, serif',
+            fontFamily: '"Plus Jakarta Sans", sans-serif',
           }}
         >
-          {isDragActive ? 'Drop files here' : 'Tap to Browse Files'}
+          {isDragActive ? 'Drop your files here' : 'Tap to Browse Documents'}
         </Typography>
 
-        <Typography variant="body2" sx={{ color: '#64748b', mt: 0.5, mb: 2, fontSize: '0.82rem' }}>
-          Supports PDF, JPG, PNG, DOCX (Auto-scaled to A4)
+        <Typography variant="body2" sx={{ color: colors.textSecondary, mt: 0.5, mb: 2, fontSize: '0.82rem' }}>
+          Supports PDF, Images, Word Documents (Auto-scaled to A4)
         </Typography>
 
         <Box
@@ -124,17 +131,19 @@ export default function FileUploader({ onFilesAdded, hasFiles = false }) {
             px: 2.75,
             py: 1,
             borderRadius: '10px',
-            bgcolor: '#eff6ff',
-            color: '#2563eb',
+            bgcolor: isDark ? 'rgba(37, 99, 235, 0.18)' : '#eff6ff',
+            color: colors.primary,
             fontWeight: 700,
             fontSize: '0.86rem',
-            border: '1px solid #bfdbfe',
+            border: `1px solid ${isDark ? 'rgba(37, 99, 235, 0.35)' : '#bfdbfe'}`,
             transition: 'all 0.15s ease',
-            '&:hover': { bgcolor: '#dbeafe', borderColor: '#93c5fd' },
+            '&:hover': {
+              bgcolor: isDark ? 'rgba(37, 99, 235, 0.28)' : '#dbeafe',
+            },
           }}
         >
           <AddIcon sx={{ fontSize: 18 }} />
-          <span>{hasFiles ? 'Choose Another Document' : 'Choose Document'}</span>
+          <span>{hasFiles ? 'Add Another Document' : 'Select Document'}</span>
         </Box>
       </Paper>
     </Box>

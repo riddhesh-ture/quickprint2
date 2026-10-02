@@ -215,12 +215,12 @@ export default function MerchantDashboardPage() {
   const cleanupJobFiles = async (job) => {
     if (!job) return;
     try {
-      // 1. Purge locally stored blobs from IndexedDB
-      if (job.transport === 'realtime') {
+      // 1. Purge locally stored blobs from IndexedDB unconditionally for 2-4GB RAM budget
+      if (job.id) {
         await deleteJobBlobs(job.id);
       }
 
-      // 2. Purge cloud files from Supabase Storage in single batch call
+      // 2. Purge files from Supabase Storage in single batch call if present
       if (job.files && Array.isArray(job.files)) {
         const fileUrls = job.files.map((f) => f.fileUrl).filter(Boolean);
         if (fileUrls.length > 0) {
@@ -446,7 +446,7 @@ export default function MerchantDashboardPage() {
       await cleanupJobFiles(job);
       setSnackbar({
         open: true,
-        message: `Job ${job.id.slice(-6)} marked Done (Paid) & memory purged!`,
+        message: `Order ${job.tokenNumber || job.id.slice(-6)} completed & memory cleared!`,
         severity: 'success',
       });
     } catch (e) {
@@ -454,6 +454,52 @@ export default function MerchantDashboardPage() {
       setSnackbar({ open: true, message: 'Failed to complete job', severity: 'error' });
     }
   };
+
+  // Web Audio chime for incoming jobs (zero audio asset dependency)
+  const prevPendingCountRef = useRef(null);
+  useEffect(() => {
+    if (prevPendingCountRef.current !== null && pendingJobs.length > prevPendingCountRef.current) {
+      try {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (AudioCtx) {
+          const ctx = new AudioCtx();
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(587.33, ctx.currentTime);
+          osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.12);
+          gain.gain.setValueAtTime(0.12, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start();
+          osc.stop(ctx.currentTime + 0.35);
+        }
+      } catch {
+        // AudioContext blocked by browser policy
+      }
+    }
+    prevPendingCountRef.current = pendingJobs.length;
+  }, [pendingJobs.length]);
+
+  // Ergonomic Merchant Keyboard Shortcuts: Space key triggers Print (pending) or Done (Paid)
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) return;
+      if (e.code === 'Space') {
+        if (processingJobId) return;
+        if (awaitingPaymentJobs.length > 0) {
+          e.preventDefault();
+          handleDonePaid(awaitingPaymentJobs[0]);
+        } else if (pendingJobs.length > 0) {
+          e.preventDefault();
+          handleAcceptJob(pendingJobs[0]);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [awaitingPaymentJobs, pendingJobs, processingJobId]);
 
   // Merchant verifies customer's payment claim
   const handleConfirmPayment = async (jobId) => {
@@ -527,12 +573,12 @@ export default function MerchantDashboardPage() {
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
               <SecurityIcon sx={{ fontSize: 16, color: 'success.main' }} />
               <Typography variant="body2" color="text.secondary">
-                Zero Cloud Storage for files ≤ 25MB • Auto-purged on complete
+                Zero Document Retention • Automatically deleted once printed
               </Typography>
             </Box>
             <Chip
               icon={<BoltIcon sx={{ fontSize: 16 }} />}
-              label={isRelayConnected ? 'Relay Fast Lane Online' : 'Connecting Relay...'}
+              label={isRelayConnected ? 'Direct Transfer Online' : 'Connecting...'}
               color={isRelayConnected ? 'success' : 'default'}
               size="small"
               variant="outlined"

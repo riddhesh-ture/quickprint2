@@ -30,23 +30,23 @@ export default function PrivacyDialog({ open, onClose }) {
   const points = [
     {
       icon: <BoltIcon sx={{ color: '#2563eb' }} />,
-      title: 'Peer-to-Peer Fast-Lane Streaming',
-      desc: 'Documents stream directly in encrypted binary chunks to the merchant terminal. Zero intermediary file retention.',
+      title: 'Direct Printer Transfer',
+      desc: 'Documents send straight to the print station for printing without any permanent retention.',
     },
     {
       icon: <ShieldOutlinedIcon sx={{ color: '#10b981' }} />,
-      title: 'Zero Cloud Document Storage',
-      desc: 'We do not store your PDFs or images on AWS, Supabase, or any cloud server. Your private files never reside in a cloud bucket.',
+      title: 'Zero Online Document Retention',
+      desc: 'We never store your PDFs, images, or files on remote servers. Your private files are never kept.',
     },
     {
       icon: <DeleteSweepIcon sx={{ color: '#f59e0b' }} />,
-      title: 'Immediate Memory Purge',
-      desc: 'Files exist solely in local memory while spooling to the physical printer. They are shredded immediately upon completion.',
+      title: 'Instant Automatic Cleanup',
+      desc: 'Files exist solely while printing and are completely deleted immediately once your print job finishes.',
     },
     {
       icon: <NoAccountsIcon sx={{ color: '#8b5cf6' }} />,
-      title: 'No Required Account or Tracking',
-      desc: 'Orders are identified by anonymous, ephemeral tokens (#14-8421). No phone number or account registration required for counter prints.',
+      title: 'No Account Required',
+      desc: 'Orders are identified by anonymous pickup tokens (#14-8421). No phone number or account registration required.',
     },
   ];
 

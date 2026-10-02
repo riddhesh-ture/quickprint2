@@ -1,13 +1,24 @@
 // src/pages/PaymentSelectionPage.jsx
 import React, { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
-import { Container, Box, Typography, Stack, Paper, Divider } from '@mui/material';
+import { Container, Box, Typography, Stack, Paper, Divider, Button, Tooltip } from '@mui/material';
 import RawCheckCircleIcon from '@mui/icons-material/CheckCircle';
 import RawRadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
 import RawPaymentsIcon from '@mui/icons-material/Payments';
 import RawVerifiedUserIcon from '@mui/icons-material/VerifiedUser';
+import RawContentCopyIcon from '@mui/icons-material/ContentCopy';
+import RawCheckIcon from '@mui/icons-material/Check';
+import RawLaunchIcon from '@mui/icons-material/Launch';
 import { unwrapIcon } from '../utils/iconHelper';
 import { useThemeMode } from '../context/ThemeContext';
+
+const CheckCircleIcon = unwrapIcon(RawCheckCircleIcon);
+const RadioButtonUncheckedIcon = unwrapIcon(RawRadioButtonUncheckedIcon);
+const PaymentsIcon = unwrapIcon(RawPaymentsIcon);
+const VerifiedUserIcon = unwrapIcon(RawVerifiedUserIcon);
+const ContentCopyIcon = unwrapIcon(RawContentCopyIcon);
+const CheckIcon = unwrapIcon(RawCheckIcon);
+const LaunchIcon = unwrapIcon(RawLaunchIcon);
 import {
   AppHeader,
   ShopIdentityHeader,
@@ -15,14 +26,9 @@ import {
   TrustBanner,
   StickyActionDock,
 } from '../components/Blocks';
-import { getMerchantProfile } from '../supabase/db';
+import { getMerchantProfile, updatePrintJob } from '../supabase/db';
 import { getOrCreateUserIdentity } from '../utils/nameGenerator';
 import { formatOrderToken, generateDailyTokenNumber, generatePin } from '../utils/tokenGenerator';
-
-const CheckCircleIcon = unwrapIcon(RawCheckCircleIcon);
-const RadioButtonUncheckedIcon = unwrapIcon(RawRadioButtonUncheckedIcon);
-const PaymentsIcon = unwrapIcon(RawPaymentsIcon);
-const VerifiedUserIcon = unwrapIcon(RawVerifiedUserIcon);
 
 const DEFAULT_DEMO_MERCHANT = {
   id: 'campus-library-04',
@@ -46,6 +52,8 @@ export default function PaymentSelectionPage() {
 
   const [merchantProfile, setMerchantProfile] = useState(DEFAULT_DEMO_MERCHANT);
   const [selectedMethod, setSelectedMethod] = useState('upi'); // 'upi' | 'cash'
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [copiedUpi, setCopiedUpi] = useState(false);
 
   // Extract order properties
   const filesList = incoming.files || [];
@@ -65,38 +73,71 @@ export default function PaymentSelectionPage() {
     }
   }, [merchantId]);
 
-  const handlePayAndProceed = () => {
-    const identity = getOrCreateUserIdentity() || { name: 'Student Guest', avatar: '🎓' };
-    const dailyToken = generateDailyTokenNumber();
-    const pin = generatePin();
-    const tokenDisplay = formatOrderToken(dailyToken, pin);
+  const merchantUpiId = merchantProfile?.upiId || merchantProfile?.upi_id;
 
-    const orderData = {
-      jobId: activeJobId,
-      orderId: activeJobId,
-      tokenNumber: tokenDisplay,
-      dailyToken,
-      pin,
-      merchantId,
-      merchantName: merchantProfile.shopName,
-      shopCode: merchantProfile.shopCode,
-      userName: identity.name,
-      userAvatar: identity.avatar,
-      fileName: primaryFileName,
-      pages: totalPages,
-      amount: totalCost,
-      paymentMethod: selectedMethod,
-      formattedDate: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    };
-
-    navigate(`/receipt/pending?merchantId=${merchantId}&jobId=${activeJobId}`, {
-      state: { order: orderData },
+  const upiIntentUrl = useMemo(() => {
+    if (!merchantUpiId) return null;
+    const params = new URLSearchParams({
+      pa: merchantUpiId,
+      pn: merchantProfile?.shopName || 'QuickPrint Station',
+      am: totalCost,
+      cu: 'INR',
+      tn: `Order ${activeJobId.slice(-6)}`,
     });
+    return `upi://pay?${params.toString()}`;
+  }, [merchantUpiId, merchantProfile?.shopName, totalCost, activeJobId]);
+
+  const handlePayAndProceed = async () => {
+    setIsSubmitting(true);
+    try {
+      const identity = getOrCreateUserIdentity() || { name: 'Student Guest', avatar: '🎓' };
+      const dailyToken = incoming.dailyToken || generateDailyTokenNumber();
+      const pin = incoming.pin || generatePin();
+      const tokenDisplay = incoming.tokenNumber || formatOrderToken(dailyToken, pin);
+
+      const orderData = {
+        jobId: activeJobId,
+        orderId: activeJobId,
+        tokenNumber: tokenDisplay,
+        dailyToken,
+        pin,
+        merchantId,
+        merchantName: merchantProfile.shopName,
+        shopCode: merchantProfile.shopCode,
+        userName: identity.name,
+        userAvatar: identity.avatar,
+        fileName: primaryFileName,
+        pages: totalPages,
+        amount: totalCost,
+        paymentMethod: selectedMethod,
+        formattedDate: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      };
+
+      // Persist token & payment state to Supabase so merchant sees it in real time
+      try {
+        await updatePrintJob(activeJobId, {
+          tokenNumber: tokenDisplay,
+          dailyToken,
+          pin,
+          paymentMethod: selectedMethod,
+          status: selectedMethod === 'upi' ? 'paymentClaimed' : 'pending',
+          cost: Number(totalCost),
+        });
+      } catch (dbErr) {
+        console.warn('[PaymentSelectionPage] DB token registration notice:', dbErr);
+      }
+
+      navigate(`/receipt/pending?merchantId=${merchantId}&jobId=${activeJobId}`, {
+        state: { order: orderData },
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
     <Box sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', bgcolor: isDark ? colors.bg : '#faf8ff' }}>
-      <AppHeader title="Checkout & Payment" showBack backTo={`/print?merchantId=${merchantId}`} />
+      <AppHeader title="QuickPrint" subtitle="Payment" showBack backTo={`/print?merchantId=${merchantId}`} />
 
       <Container maxWidth="xs" sx={{ py: 3, flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
         {/* Shop Info Header */}
@@ -179,19 +220,73 @@ export default function PaymentSelectionPage() {
             {selectedMethod === 'upi' && (
               <Box
                 sx={{
-                  p: 1.5,
+                  p: 1.75,
                   borderRadius: '12px',
                   bgcolor: isDark ? 'rgba(37,99,235,0.12)' : '#eff6ff',
                   border: `1px solid ${isDark ? '#1d4ed8' : '#bfdbfe'}`,
                   display: 'flex',
-                  alignItems: 'flex-start',
+                  flexDirection: 'column',
                   gap: 1.25,
                 }}
               >
-                <VerifiedUserIcon sx={{ color: colors.primary, fontSize: 18, mt: 0.2, flexShrink: 0 }} />
-                <Typography variant="body2" sx={{ color: isDark ? '#93c5fd' : '#1e40af', fontSize: '0.8rem', lineHeight: 1.4 }}>
-                  <strong>Counter Verification:</strong> Pay via your UPI app and show your payment success screenshot to the merchant at the counter for instant job release.
-                </Typography>
+                <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.25 }}>
+                  <VerifiedUserIcon sx={{ color: colors.primary, fontSize: 18, mt: 0.2, flexShrink: 0 }} />
+                  <Typography variant="body2" sx={{ color: isDark ? '#93c5fd' : '#1e40af', fontSize: '0.8rem', lineHeight: 1.4 }}>
+                    <strong>Counter Verification:</strong> Pay via UPI and show your payment screenshot along with your Pickup Token at the counter.
+                  </Typography>
+                </Box>
+
+                {merchantUpiId && (
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      p: 1,
+                      borderRadius: '8px',
+                      bgcolor: isDark ? 'rgba(255,255,255,0.06)' : '#ffffff',
+                      border: `1px solid ${colors.border}`,
+                    }}
+                  >
+                    <Typography variant="caption" sx={{ fontFamily: 'monospace', fontWeight: 700, color: colors.text }}>
+                      UPI: {merchantUpiId}
+                    </Typography>
+                    <Button
+                      size="small"
+                      startIcon={copiedUpi ? <CheckIcon sx={{ fontSize: 14 }} /> : <ContentCopyIcon sx={{ fontSize: 14 }} />}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigator.clipboard.writeText(merchantUpiId);
+                        setCopiedUpi(true);
+                        setTimeout(() => setCopiedUpi(false), 2000);
+                      }}
+                      sx={{ textTransform: 'none', fontSize: '0.74rem', py: 0.2, px: 1, fontWeight: 700 }}
+                    >
+                      {copiedUpi ? 'Copied' : 'Copy'}
+                    </Button>
+                  </Box>
+                )}
+
+                {upiIntentUrl && (
+                  <Button
+                    component="a"
+                    href={upiIntentUrl}
+                    variant="outlined"
+                    size="small"
+                    endIcon={<LaunchIcon sx={{ fontSize: 14 }} />}
+                    sx={{
+                      width: '100%',
+                      borderRadius: '8px',
+                      textTransform: 'none',
+                      fontWeight: 700,
+                      fontSize: '0.8rem',
+                      borderColor: colors.primary,
+                      color: colors.primary,
+                    }}
+                  >
+                    Pay ₹{totalCost} via Installed UPI App
+                  </Button>
+                )}
               </Box>
             )}
 
@@ -237,8 +332,10 @@ export default function PaymentSelectionPage() {
       {/* Sticky Bottom Dock */}
       <StickyActionDock
         priceText={`₹${totalCost}`}
-        primaryLabel="Pay & Get Print Token"
+        primaryLabel={isSubmitting ? 'Confirming...' : (selectedMethod === 'upi' ? 'Confirm Payment & Get Token' : 'Get Pickup Token')}
         onPrimaryClick={handlePayAndProceed}
+        disabled={isSubmitting}
+        loading={isSubmitting}
       />
     </Box>
   );

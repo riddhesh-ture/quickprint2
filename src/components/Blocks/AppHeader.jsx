@@ -58,13 +58,14 @@ export default function AppHeader({
           mx: 'auto',
           height: 64,
           px: { xs: 2, sm: 3 },
+          position: 'relative',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
         }}
       >
-        {/* Left: Back button or Brand */}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, minWidth: 0 }}>
+        {/* Left Slot: Back Button or Spacer */}
+        <Box sx={{ width: 44, display: 'flex', alignItems: 'center', justifyContent: 'flex-start', zIndex: 2 }}>
           {showBack && (
             <IconButton
               edge="start"
@@ -80,69 +81,76 @@ export default function AppHeader({
               <ArrowBackIcon sx={{ fontSize: 20 }} />
             </IconButton>
           )}
+        </Box>
 
+        {/* Center Slot: QuickPrint Logo & Branding (Dead-center) */}
+        <Box
+          onClick={() => navigate(isMerchant ? '/merchant/dashboard' : '/')}
+          sx={{
+            position: 'absolute',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1.25,
+            cursor: 'pointer',
+            userSelect: 'none',
+            zIndex: 1,
+            maxWidth: 'calc(100% - 110px)',
+            justifyContent: 'center',
+          }}
+        >
           <Box
-            onClick={() => navigate(isMerchant ? '/merchant/dashboard' : '/')}
             sx={{
+              width: 36,
+              height: 36,
+              borderRadius: '10px',
+              bgcolor: isDark ? 'rgba(37,99,235,0.18)' : '#eff6ff',
+              color: colors.primary,
               display: 'flex',
               alignItems: 'center',
-              gap: 1.25,
-              cursor: 'pointer',
-              userSelect: 'none',
-              minWidth: 0,
+              justifyContent: 'center',
+              flexShrink: 0,
             }}
           >
-            <Box
+            {isMerchant ? <StorefrontIcon sx={{ fontSize: 20 }} /> : <PrintIcon sx={{ fontSize: 20 }} />}
+          </Box>
+
+          <Box sx={{ minWidth: 0, textAlign: 'left' }}>
+            <Typography
+              variant="h6"
+              noWrap
               sx={{
-                width: 36,
-                height: 36,
-                borderRadius: '10px',
-                bgcolor: isDark ? 'rgba(37,99,235,0.18)' : '#eff6ff',
-                color: colors.primary,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                flexShrink: 0,
+                fontWeight: 800,
+                fontSize: { xs: '1.05rem', sm: '1.15rem' },
+                letterSpacing: '-0.02em',
+                color: colors.text,
+                fontFamily: '"Plus Jakarta Sans", sans-serif',
+                lineHeight: 1.2,
               }}
             >
-              {isMerchant ? <StorefrontIcon sx={{ fontSize: 20 }} /> : <PrintIcon sx={{ fontSize: 20 }} />}
-            </Box>
-
-            <Box sx={{ minWidth: 0 }}>
+              {title}
+            </Typography>
+            {(subtitle || (isMerchant && merchantName)) && (
               <Typography
-                variant="h6"
+                variant="caption"
                 noWrap
                 sx={{
-                  fontWeight: 800,
-                  fontSize: { xs: '1.05rem', sm: '1.15rem' },
-                  letterSpacing: '-0.02em',
-                  color: colors.text,
-                  fontFamily: '"Plus Jakarta Sans", sans-serif',
+                  display: 'block',
+                  color: colors.textSecondary,
+                  fontSize: '0.72rem',
+                  fontWeight: 500,
+                  lineHeight: 1,
                 }}
               >
-                {title}
+                {subtitle || merchantName}
               </Typography>
-              {(subtitle || (isMerchant && merchantName)) && (
-                <Typography
-                  variant="caption"
-                  noWrap
-                  sx={{
-                    display: 'block',
-                    color: colors.textSecondary,
-                    fontSize: '0.72rem',
-                    fontWeight: 500,
-                    lineHeight: 1,
-                  }}
-                >
-                  {subtitle || merchantName}
-                </Typography>
-              )}
-            </Box>
+            )}
           </Box>
         </Box>
 
-        {/* Right Action: Custom Slot + Theme Toggle */}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        {/* Right Slot: Custom Slot + Theme Toggle */}
+        <Box sx={{ width: 44, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 1, zIndex: 2 }}>
           {rightAction}
 
           <Tooltip title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'} arrow>

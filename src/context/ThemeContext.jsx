@@ -1,5 +1,7 @@
 // src/context/ThemeContext.jsx
 import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
+import { ThemeProvider, createTheme } from '@mui/material/styles';
+import CssBaseline from '@mui/material/CssBaseline';
 
 const ThemeContext = createContext(null);
 
@@ -81,6 +83,31 @@ export function ThemeContextProvider({ children }) {
     document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
   }, [isDark]);
 
+  const muiTheme = useMemo(() => {
+    return createTheme({
+      palette: {
+        mode: isDark ? 'dark' : 'light',
+        primary: {
+          main: isDark ? THEME_COLORS.dark.primary : THEME_COLORS.light.primary,
+        },
+        background: {
+          default: isDark ? THEME_COLORS.dark.bg : THEME_COLORS.light.bg,
+          paper: isDark ? THEME_COLORS.dark.surface : THEME_COLORS.light.surface,
+        },
+        text: {
+          primary: isDark ? THEME_COLORS.dark.text : THEME_COLORS.light.text,
+          secondary: isDark ? THEME_COLORS.dark.textSecondary : THEME_COLORS.light.textSecondary,
+        },
+      },
+      shape: {
+        borderRadius: 12,
+      },
+      typography: {
+        fontFamily: '"Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+      },
+    });
+  }, [isDark]);
+
   const value = useMemo(() => ({
     isDark,
     toggleTheme,
@@ -89,7 +116,14 @@ export function ThemeContextProvider({ children }) {
     colors: isDark ? THEME_COLORS.dark : THEME_COLORS.light,
   }), [isDark]);
 
-  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
+  return (
+    <ThemeContext.Provider value={value}>
+      <ThemeProvider theme={muiTheme}>
+        <CssBaseline />
+        {children}
+      </ThemeProvider>
+    </ThemeContext.Provider>
+  );
 }
 
 export function useThemeMode() {
