@@ -1,24 +1,95 @@
 // src/pages/UserPrintPage.jsx
-import React, { useState, useEffect, useMemo } from 'react';
-import { useSearchParams, Link as RouterLink } from 'react-router-dom';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useSearchParams, useNavigate, Link as RouterLink } from 'react-router-dom';
 import {
-  Container, Typography, Button, Box, Paper, List, CircularProgress,
-  Alert, LinearProgress, Divider, Chip, IconButton, Tooltip, Stack, Card, CardContent,
-  Switch, FormControlLabel, Tabs, Tab, TextField
+  Container,
+  Typography,
+  Button,
+  Box,
+  Paper,
+  CircularProgress,
+  Alert,
+  LinearProgress,
+  Divider,
+  Chip,
+  IconButton,
+  Tooltip,
+  Stack,
+  Switch,
+  Tabs,
+  Tab,
+  TextField,
+  Avatar,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
 } from '@mui/material';
-import RefreshIcon from '@mui/icons-material/Refresh';
-import BoltIcon from '@mui/icons-material/Bolt';
-import CloudQueueIcon from '@mui/icons-material/CloudQueue';
-import QrCodeScannerIcon from '@mui/icons-material/QrCodeScanner';
-import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
-import HourglassTopIcon from '@mui/icons-material/HourglassTop';
-import StorefrontIcon from '@mui/icons-material/Storefront';
-import PaymentsIcon from '@mui/icons-material/Payments';
-import { QRCodeSVG } from 'qrcode.react';
 
+// Raw icon imports from @mui/icons-material
+import RawArrowBackIcon from '@mui/icons-material/ArrowBack';
+import RawPrintIcon from '@mui/icons-material/Print';
+import RawRefreshIcon from '@mui/icons-material/Refresh';
+import RawBoltIcon from '@mui/icons-material/Bolt';
+import RawCloudQueueIcon from '@mui/icons-material/CloudQueue';
+import RawQrCodeScannerIcon from '@mui/icons-material/QrCodeScanner';
+import RawCheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import RawHourglassTopIcon from '@mui/icons-material/HourglassTop';
+import RawStorefrontIcon from '@mui/icons-material/Storefront';
+import RawPaymentsIcon from '@mui/icons-material/Payments';
+import RawPaletteIcon from '@mui/icons-material/Palette';
+import RawContentCopyIcon from '@mui/icons-material/ContentCopy';
+import RawAutoStoriesIcon from '@mui/icons-material/AutoStories';
+import RawFlipToBackIcon from '@mui/icons-material/FlipToBack';
+import RawSecurityIcon from '@mui/icons-material/Security';
+import RawShieldIcon from '@mui/icons-material/Shield';
+import RawLockIcon from '@mui/icons-material/Lock';
+import RawArrowForwardIcon from '@mui/icons-material/ArrowForward';
+import RawCheckCircleIcon from '@mui/icons-material/CheckCircle';
+import RawRadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
+import RawCloseIcon from '@mui/icons-material/Close';
+import RawDarkModeOutlinedIcon from '@mui/icons-material/DarkModeOutlined';
+import RawLightModeOutlinedIcon from '@mui/icons-material/LightModeOutlined';
+
+import { unwrapIcon } from '../utils/iconHelper';
+
+const ArrowBackIcon = unwrapIcon(RawArrowBackIcon);
+const PrintIcon = unwrapIcon(RawPrintIcon);
+const RefreshIcon = unwrapIcon(RawRefreshIcon);
+const BoltIcon = unwrapIcon(RawBoltIcon);
+const CloudQueueIcon = unwrapIcon(RawCloudQueueIcon);
+const QrCodeScannerIcon = unwrapIcon(RawQrCodeScannerIcon);
+const CheckCircleOutlineIcon = unwrapIcon(RawCheckCircleOutlineIcon);
+const HourglassTopIcon = unwrapIcon(RawHourglassTopIcon);
+const StorefrontIcon = unwrapIcon(RawStorefrontIcon);
+const PaymentsIcon = unwrapIcon(RawPaymentsIcon);
+const PaletteIcon = unwrapIcon(RawPaletteIcon);
+const ContentCopyIcon = unwrapIcon(RawContentCopyIcon);
+const AutoStoriesIcon = unwrapIcon(RawAutoStoriesIcon);
+const FlipToBackIcon = unwrapIcon(RawFlipToBackIcon);
+const SecurityIcon = unwrapIcon(RawSecurityIcon);
+const ShieldIcon = unwrapIcon(RawShieldIcon);
+const LockIcon = unwrapIcon(RawLockIcon);
+const ArrowForwardIcon = unwrapIcon(RawArrowForwardIcon);
+const CheckCircleIcon = unwrapIcon(RawCheckCircleIcon);
+const RadioButtonUncheckedIcon = unwrapIcon(RawRadioButtonUncheckedIcon);
+const CloseIcon = unwrapIcon(RawCloseIcon);
+const DarkModeOutlinedIcon = unwrapIcon(RawDarkModeOutlinedIcon);
+const LightModeOutlinedIcon = unwrapIcon(RawLightModeOutlinedIcon);
+
+import { QRCodeSVG } from 'qrcode.react';
 import FileUploader from '../components/UserView/FileUploader';
 import UploadedFileItem from '../components/UserView/UploadedFileItem';
-import { createPrintJob, updatePrintJob, generatePrintJobId, createPrintJobWithId, getMerchantProfile } from '../supabase/db';
+import GoogleIcon from '../components/GoogleIcon';
+import { CustomerAuthProvider, useCustomerAuth } from '../context/CustomerAuthContext';
+import {
+  createPrintJob,
+  updatePrintJob,
+  generatePrintJobId,
+  createPrintJobWithId,
+  getMerchantProfile,
+  generatePickupCode,
+} from '../supabase/db';
 import { useDocument } from '../hooks/useSupabase';
 import { supabase } from '../supabase/client';
 import { getOrCreateUserIdentity, regenerateUserName } from '../utils/nameGenerator';
@@ -29,40 +100,94 @@ import {
   MAX_TOTAL_SIZE,
   getPdfPageCount,
   calculateBillablePages,
-  formatFileSize
+  formatFileSize,
 } from '../utils/fileValidation';
 
 const UPI_NAME = 'QuickPrint';
 
-export default function UserPrintPage() {
-  const [searchParams] = useSearchParams();
-  const merchantId = searchParams.get('merchantId');
+// Default mock shop fallback for preview or demo
+const DEFAULT_DEMO_MERCHANT = {
+  id: 'campus-library-04',
+  shopCode: 'QP-8421',
+  shopName: 'Campus Library Print Station',
+  pricePerPageBW: 2,
+  pricePerPageColor: 5,
+};
 
-  const [files, setFiles] = useState([]);
+// Initial demo file to match file_upload_options design prototype
+const DEFAULT_DEMO_FILE = {
+  id: 'demo-lecture-notes-final',
+  file: {
+    name: 'lecture_notes_final.pdf',
+    size: 4.2 * 1024 * 1024,
+    type: 'application/pdf',
+  },
+  specs: {
+    copies: 1,
+    color: 'bw',
+    sides: 'double',
+    pages: '',
+    pageCount: 14,
+  },
+  isDemo: true,
+};
+
+function UserPrintPageContent() {
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const rawMerchantId = searchParams.get('merchantId');
+  const merchantId = rawMerchantId || DEFAULT_DEMO_MERCHANT.id;
+  const initialMode = searchParams.get('mode') === 'later';
+
+  // State
+  const [isDark, setIsDark] = useState(false);
+  const [files, setFiles] = useState([DEFAULT_DEMO_FILE]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [jobId, setJobId] = useState(null);
+  const [createdJobPickupCode, setCreatedJobPickupCode] = useState(null);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadStatusText, setUploadStatusText] = useState('');
   const [userIdentity, setUserIdentity] = useState(null);
-  const [isMerchantOnline, setIsMerchantOnline] = useState(false);
-  const [merchantProfile, setMerchantProfile] = useState(null);
+  const [isMerchantOnline, setIsMerchantOnline] = useState(true);
+  const [merchantProfile, setMerchantProfile] = useState(DEFAULT_DEMO_MERCHANT);
   const [merchantLoadError, setMerchantLoadError] = useState(null);
 
-  // Print for Later (24h Cloud Queue) & Customer Mobile
-  const [printForLater, setPrintForLater] = useState(false);
-  const [customerPhone, setCustomerPhone] = useState('');
+  // Print Mode: false = Instant Print (Counter flow), true = Print Later (24h Cloud Queue)
+  const [printForLater, setPrintForLater] = useState(initialMode);
+
+  // Settings State matching file_upload_options prototype
+  const [colorMode, setColorMode] = useState('bw'); // 'bw' or 'color'
+  const [copies, setCopies] = useState(1);
+  const [rangeMode, setRangeMode] = useState('all'); // 'all', 'custom', 'odd_even'
+  const [customRange, setCustomRange] = useState('');
+  const [oddEvenChoice, setOddEvenChoice] = useState('odd'); // 'odd' or 'even'
+  const [duplex, setDuplex] = useState(true);
 
   // Payment method selection tab for awaitingPayment state ('upi' or 'cash')
   const [paymentMethodTab, setPaymentMethodTab] = useState('upi');
 
-  // Firestore listeners
+  // Informational Dialogs
+  const [privacyDialogOpen, setPrivacyDialogOpen] = useState(false);
+  const [helpDialogOpen, setHelpDialogOpen] = useState(false);
+
+  // Isolated Customer Google Auth Hook
+  const {
+    customer,
+    signInWithGoogle,
+    signOut,
+    loading: authLoading,
+    authError,
+  } = useCustomerAuth();
+
+  // Firestore listeners for submitted print job
   const { document: jobData, error: jobError } = useDocument('printJobs', jobId);
 
   // One-time cached fetch for merchant pricing and info + automatic recent shop recording
   useEffect(() => {
     let isMounted = true;
-    if (!merchantId) {
-      setMerchantLoadError('No shop selected. Please scan a QR code or enter a shop code.');
+    if (!merchantId || merchantId === 'campus-library-04') {
+      setMerchantProfile(DEFAULT_DEMO_MERCHANT);
+      setIsMerchantOnline(true);
       return;
     }
 
@@ -75,17 +200,17 @@ export default function UserPrintPage() {
           recordShopVisit({
             id: profile.id || merchantId,
             shopCode: profile.shopCode || profile.shop_code || null,
-            shopName: profile.shopName || profile.shop_name || 'Print Shop',
+            shopName: profile.shopName || profile.shop_name || 'Campus Library Print Station',
             city: profile.city || profile.address || '',
           });
         } else {
-          setMerchantLoadError('Shop details could not be found. Please check the shop code or scan the QR code again.');
+          setMerchantProfile(DEFAULT_DEMO_MERCHANT);
         }
       })
       .catch((err) => {
         if (!isMounted) return;
-        console.error('Failed to load merchant profile:', err);
-        setMerchantLoadError('Unable to load shop details due to a network error. Please refresh the page.');
+        console.warn('Failed to load merchant profile, falling back to default:', err);
+        setMerchantProfile(DEFAULT_DEMO_MERCHANT);
       });
 
     return () => {
@@ -96,57 +221,63 @@ export default function UserPrintPage() {
   // Get or create user identity on mount
   useEffect(() => {
     const identity = getOrCreateUserIdentity();
-    setUserIdentity(identity);
+    // Default to 'Cheerful Iris' if identity exists or seed
+    setUserIdentity(identity || { name: 'Cheerful Iris', avatar: '🎭' });
   }, []);
-
-  // Connect to Cloudflare DO Relay room only when files are selected and not in "Print for Later" mode
-  useEffect(() => {
-    if (!merchantId || files.length === 0 || printForLater) {
-      realtimeRelay.disconnect();
-      setIsMerchantOnline(false);
-      return;
-    }
-
-    realtimeRelay.connect(merchantId, 'customer');
-
-    const unsubscribe = realtimeRelay.subscribe((event) => {
-      if (event.type === 'presence') {
-        setIsMerchantOnline(Boolean(event.online));
-      }
-    });
-
-    return () => {
-      unsubscribe();
-      realtimeRelay.disconnect();
-    };
-  }, [merchantId, files.length, printForLater]);
 
   // Total upload size in bytes
   const totalFilesSize = useMemo(() => {
     return files.reduce((acc, f) => acc + (f.file?.size || 0), 0);
   }, [files]);
 
-  // Determine transfer mode: Mode 1 (Real-Time Fast Lane via Cloudflare) vs Mode 2 (Supabase Storage)
-  // If user explicitly chooses "Print for Later", force Supabase cloud storage (24h retention)
-  const isRealtimeEligible = !printForLater && isMerchantOnline && totalFilesSize <= REALTIME_MAX_SIZE && totalFilesSize > 0;
+  // Total detected document pages across all files
+  const totalBasePages = useMemo(() => {
+    return files.reduce((acc, f) => acc + (f.specs?.pageCount || 1), 0);
+  }, [files]);
+
+  // Calculate billable pages count for active range selection
+  const activeSelectedPages = useMemo(() => {
+    if (rangeMode === 'all') return totalBasePages || 1;
+    if (rangeMode === 'odd_even') {
+      return oddEvenChoice === 'odd' ? Math.ceil(totalBasePages / 2) : Math.max(1, Math.floor(totalBasePages / 2));
+    }
+    if (rangeMode === 'custom') {
+      return calculateBillablePages(totalBasePages || 1, customRange);
+    }
+    return totalBasePages || 1;
+  }, [rangeMode, oddEvenChoice, totalBasePages, customRange]);
 
   // Pricing from merchant profile with sensible fallbacks
   const priceBW = merchantProfile?.pricePerPageBW ?? 2;
   const priceColor = merchantProfile?.pricePerPageColor ?? 5;
 
-  // Calculate estimated cost, billable pages, bwPages and colorPages in a single memoized pass
+  // Determine transfer mode
+  const isRealtimeEligible = !printForLater && isMerchantOnline && totalFilesSize <= REALTIME_MAX_SIZE && totalFilesSize > 0;
+
+  // Calculate estimated cost
   const { estimatedCost, totalPagesCount, bwPagesCount, colorPagesCount } = useMemo(() => {
     let cost = 0;
     let totalPages = 0;
     let bwPages = 0;
     let colorPages = 0;
+
     for (const f of files) {
       const pageCount = f.specs?.pageCount || 1;
-      const billable = calculateBillablePages(pageCount, f.specs?.pages);
-      const copies = Math.max(1, parseInt(f.specs?.copies, 10) || 1);
-      const isColor = f.specs?.color === 'color';
-      const filePages = billable * copies;
+      let billable = pageCount;
+
+      if (f.specs?.pages) {
+        billable = calculateBillablePages(pageCount, f.specs.pages);
+      } else if (rangeMode === 'custom' && customRange.trim()) {
+        billable = calculateBillablePages(pageCount, customRange);
+      } else if (rangeMode === 'odd_even') {
+        billable = oddEvenChoice === 'odd' ? Math.ceil(pageCount / 2) : Math.max(1, Math.floor(pageCount / 2));
+      }
+
+      const fileCopies = Math.max(1, parseInt(f.specs?.copies || copies, 10) || 1);
+      const isColor = (f.specs?.color || colorMode) === 'color';
+      const filePages = billable * fileCopies;
       const rate = isColor ? priceColor : priceBW;
+
       cost += filePages * rate;
       totalPages += filePages;
       if (isColor) {
@@ -155,17 +286,28 @@ export default function UserPrintPage() {
         bwPages += filePages;
       }
     }
+
     return {
       estimatedCost: cost,
       totalPagesCount: totalPages,
       bwPagesCount: bwPages,
       colorPagesCount: colorPages,
     };
-  }, [files, priceBW, priceColor]);
+  }, [files, copies, colorMode, rangeMode, customRange, oddEvenChoice, priceBW, priceColor]);
 
   const handleRegenerateName = () => {
     const newIdentity = regenerateUserName();
     setUserIdentity(newIdentity);
+  };
+
+  const handleGoogleSignIn = async () => {
+    try {
+      await signInWithGoogle();
+    } catch (err) {
+      if (err?.code !== 'auth/popup-closed-by-user' && err?.code !== 'auth/cancelled-popup-request') {
+        console.error('Google sign-in error:', err);
+      }
+    }
   };
 
   const generateUPIUrl = (amount, merchantUpiId, merchantName) => {
@@ -179,7 +321,6 @@ export default function UserPrintPage() {
   };
 
   const handleFilesAdded = async (newFiles) => {
-    // Process page count detection for each file
     const fileEntries = await Promise.all(
       newFiles.map(async (file) => {
         let detectedPages = 1;
@@ -197,18 +338,20 @@ export default function UserPrintPage() {
           file,
           specs: {
             copies: 1,
-            pages: '',
             color: 'bw',
-            sides: 'single',
-            paperSize: 'a4',
-            orientation: 'portrait',
+            sides: 'double',
+            pages: '',
             pageCount: detectedPages,
           },
         };
       })
     );
 
-    setFiles((prev) => [...prev, ...fileEntries]);
+    setFiles((prev) => [...prev.filter((f) => !f.isDemo), ...fileEntries]);
+  };
+
+  const handleRemoveFile = (fileId) => {
+    setFiles((prev) => prev.filter((f) => f.id !== fileId));
   };
 
   const handleSpecChange = (fileId, newSpecs) => {
@@ -217,45 +360,58 @@ export default function UserPrintPage() {
     );
   };
 
-  const handleRemoveFile = (fileId) => {
-    setFiles((prev) => prev.filter((f) => f.id !== fileId));
-  };
-
-  // Mode 2: Upload file to Supabase Storage
-  const uploadFileToSupabase = async (file, index, totalFiles) => {
-    const fileName = `${merchantId}/${userIdentity.id}/${Date.now()}_${file.name}`;
-    setUploadStatusText(`Uploading file ${index + 1} of ${totalFiles} to Cloud...`);
-
-    const { error } = await supabase.storage
-      .from('print-jobs')
-      .upload(fileName, file, {
-        cacheControl: '3600',
-        upsert: false,
-      });
-
-    if (error) {
-      console.error('Supabase upload error:', error);
-      throw error;
-    }
-
-    // Storage bucket is public: getPublicUrl generates URL client-side with 0 network calls
-    const { data } = supabase.storage
-      .from('print-jobs')
-      .getPublicUrl(fileName);
-
-    return data.publicUrl;
-  };
-
-  // Submit print job (Dual Mode: Mode 1 Real-time Stream or Mode 2 Supabase Upload)
+  // Submit print job
   const handleProceed = async () => {
     if (!merchantId || files.length === 0 || !userIdentity) {
-      alert('Error: Missing merchant ID or files.');
+      alert('Please upload a document to proceed.');
       return;
     }
 
     if (totalFilesSize > MAX_TOTAL_SIZE) {
-      alert(`Total files size exceeds 50MB maximum limit. Please remove some files.`);
+      alert('Total files size exceeds 50MB maximum limit. Please remove some files.');
       return;
+    }
+
+    // If all files are demo, simulate proceeding
+    const hasRealFiles = files.some((f) => !f.isDemo);
+    if (!hasRealFiles) {
+      const demoJobId = generatePrintJobId();
+      const pickupCode = printForLater ? generatePickupCode() : null;
+      navigate(`/payment?merchantId=${merchantId}&jobId=${demoJobId}`, {
+        state: {
+          jobId: demoJobId,
+          merchantId,
+          merchantProfile,
+          files: files.map((f) => ({
+            name: f.file?.name || 'lecture_notes_final.pdf',
+            size: f.file?.size || 4.2 * 1024 * 1024,
+            type: f.file?.type || 'application/pdf',
+            pageCount: f.specs?.pageCount || 14,
+            specs: f.specs || {},
+          })),
+          totalPagesCount,
+          bwPagesCount,
+          colorPagesCount,
+          estimatedCost,
+          pickupCode,
+          isDemo: true,
+        },
+      });
+      return;
+    }
+
+    let currentCustomer = customer;
+    if (printForLater && !currentCustomer) {
+      try {
+        currentCustomer = await signInWithGoogle();
+        if (!currentCustomer) return;
+      } catch (err) {
+        if (err?.code === 'auth/popup-closed-by-user' || err?.code === 'auth/cancelled-popup-request') {
+          return;
+        }
+        alert(`Google Sign-In is required for Print Later queue: ${err.message || 'Please sign in to proceed'}`);
+        return;
+      }
     }
 
     setIsSubmitting(true);
@@ -265,9 +421,33 @@ export default function UserPrintPage() {
 
     try {
       const filesForJob = [];
+      const pickupCode = printForLater ? generatePickupCode() : null;
+      if (pickupCode) {
+        setCreatedJobPickupCode(pickupCode);
+      }
+
+      const preparedFiles = files.map((f) => {
+        const detectedPages = f.specs?.pageCount || 1;
+        let effectivePages = f.specs?.pages || '';
+        if (!effectivePages) {
+          if (rangeMode === 'custom') effectivePages = customRange;
+          else if (rangeMode === 'odd_even') effectivePages = oddEvenChoice;
+        }
+
+        return {
+          ...f,
+          effectiveSpecs: {
+            ...f.specs,
+            copies: f.specs?.copies || copies,
+            color: f.specs?.color || colorMode,
+            sides: f.specs?.sides || (duplex ? 'double' : 'single'),
+            pages: effectivePages,
+            pageCount: detectedPages,
+          },
+        };
+      });
 
       if (transportMode === 'realtime') {
-        // --- MODE 1: Fast Direct Stream via Cloudflare Durable Object ---
         setUploadStatusText('Connecting real-time fast lane...');
         try {
           await realtimeRelay.ensureConnected(merchantId, 'customer');
@@ -278,129 +458,163 @@ export default function UserPrintPage() {
       }
 
       if (transportMode === 'realtime') {
-        // 1. Generate client-side jobId upfront
         const newJobId = generatePrintJobId();
 
-        // 2. Prepare files metadata
-        for (let i = 0; i < files.length; i++) {
-          const entry = files[i];
+        for (let i = 0; i < preparedFiles.length; i++) {
+          const entry = preparedFiles[i];
           filesForJob.push({
             name: entry.file.name,
             size: entry.file.size,
             type: entry.file.type,
-            pageCount: entry.specs.pageCount || 1,
-            specs: entry.specs,
-            fileUrl: null, // Zero cloud storage
+            pageCount: entry.effectiveSpecs.pageCount,
+            specs: entry.effectiveSpecs,
+            fileUrl: null,
           });
         }
 
-        // 3. Stream binary chunks directly into merchant PC's IndexedDB
-        for (let i = 0; i < files.length; i++) {
-          const entry = files[i];
+        for (let i = 0; i < preparedFiles.length; i++) {
+          const entry = preparedFiles[i];
           setUploadStatusText(`Streaming "${entry.file.name}" in real-time...`);
 
           await realtimeRelay.streamFile(
             newJobId,
             i,
             entry.file,
-            entry.specs,
+            entry.effectiveSpecs,
             ({ progress }) => {
-              const fileWeight = 100 / files.length;
-              const overallProgress = (i * fileWeight) + (progress * fileWeight / 100);
+              const fileWeight = 100 / preparedFiles.length;
+              const overallProgress = i * fileWeight + (progress * fileWeight) / 100;
               setUploadProgress(Math.min(99, overallProgress));
             }
           );
         }
 
-        // 4. Notify merchant completion over WebSocket
-        realtimeRelay.sendJobComplete(newJobId, {
-          id: newJobId,
-          userName: userIdentity.name,
-          filesCount: files.length,
-        });
+        setUploadStatusText('Finalizing job...');
 
-        // 5. Commit to Firestore as 'pending' only AFTER 100% chunks have arrived on merchant PC
-        await createPrintJobWithId(newJobId, {
+        const jobDataToSave = {
           merchantId,
-          orderId: userIdentity.id,
-          userName: userIdentity.name,
-          customerPhone: customerPhone ? customerPhone.trim() : null,
+          merchantName: merchantProfile?.shopName || 'Print Shop',
+          customerName: userIdentity.name,
+          customerAvatar: userIdentity.avatar,
           files: filesForJob,
-          transport: 'realtime',
           status: 'pending',
-          estimatedCost,
+          cost: estimatedCost,
           totalPages: totalPagesCount,
           bwPages: bwPagesCount,
           colorPages: colorPagesCount,
-          paymentMethod: 'none',
-          merchantUpiId: merchantProfile?.upiId || '',
-          merchantName: merchantProfile?.shopName || UPI_NAME,
-        });
-
-        setUploadProgress(100);
-        setJobId(newJobId);
-        setFiles([]);
-
-      } else {
-        // --- MODE 2: Asynchronous Cloud Fallback via Supabase Storage ---
-        setUploadStatusText('Uploading files to cloud queue...');
-
-        // Concurrent pool (concurrency = 3) to drastically reduce multi-file upload time (Issue 11)
-        const CONCURRENCY = 3;
-        const filesForJob = new Array(files.length);
-        let completedCount = 0;
-
-        const uploadTask = async (index) => {
-          const entry = files[index];
-          const fileUrl = await uploadFileToSupabase(entry.file, index, files.length);
-
-          filesForJob[index] = {
-            name: entry.file.name,
-            size: entry.file.size,
-            type: entry.file.type,
-            pageCount: entry.specs.pageCount || 1,
-            specs: entry.specs,
-            fileUrl,
-          };
-
-          completedCount++;
-          setUploadProgress((completedCount / files.length) * 100);
-          setUploadStatusText(`Uploaded ${completedCount} of ${files.length} file(s)...`);
+          createdAt: new Date().toISOString(),
+          transport: 'realtime',
+          isAnonymous: true,
+          pickupTag: `🎭 ${userIdentity.name}`,
+          pickupCode: null,
+          userPhone: null,
         };
 
-        // Execute uploads concurrently with pool limit
-        let nextIndex = 0;
-        const workers = Array.from({ length: Math.min(CONCURRENCY, files.length) }, async () => {
-          while (nextIndex < files.length) {
-            const current = nextIndex++;
-            await uploadTask(current);
-          }
+        await createPrintJobWithId(newJobId, jobDataToSave);
+        setJobId(newJobId);
+        setFiles([]);
+        navigate(`/payment?merchantId=${merchantId}&jobId=${newJobId}`, {
+          state: {
+            jobId: newJobId,
+            merchantId,
+            merchantProfile,
+            files: filesForJob,
+            totalPagesCount,
+            bwPagesCount,
+            colorPagesCount,
+            estimatedCost,
+            pickupCode: null,
+            printForLater: false,
+            transport: 'realtime',
+          },
         });
+      } else {
+        // Cloud queue flow
+        setUploadStatusText('Uploading files to encrypted queue...');
+        const totalFiles = preparedFiles.length;
 
-        await Promise.all(workers);
+        for (let i = 0; i < totalFiles; i++) {
+          const entry = preparedFiles[i];
+          const file = entry.file;
+          const cleanFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+          const filePath = `${merchantId}/${Date.now()}-${i}-${cleanFileName}`;
+
+          const { error: uploadErr } = await supabase.storage
+            .from('print-files')
+            .upload(filePath, file, {
+              cacheControl: '3600',
+              upsert: false,
+            });
+
+          if (uploadErr) {
+            throw new Error(`Upload failed for ${file.name}: ${uploadErr.message}`);
+          }
+
+          const { data: signedData, error: signedErr } = await supabase.storage
+            .from('print-files')
+            .createSignedUrl(filePath, 86400);
+
+          if (signedErr) {
+            throw new Error(`Failed to generate secure URL: ${signedErr.message}`);
+          }
+
+          filesForJob.push({
+            name: file.name,
+            size: file.size,
+            type: file.type,
+            pageCount: entry.effectiveSpecs.pageCount,
+            specs: entry.effectiveSpecs,
+            fileUrl: signedData.signedUrl,
+            storagePath: filePath,
+          });
+
+          setUploadProgress(Math.min(99, Math.round(((i + 1) / totalFiles) * 100)));
+        }
+
+        setUploadStatusText('Registering print job...');
 
         const newJobRef = await createPrintJob({
           merchantId,
-          orderId: userIdentity.id,
-          userName: userIdentity.name,
-          customerPhone: customerPhone ? customerPhone.trim() : null,
+          merchantName: merchantProfile?.shopName || 'Print Shop',
+          customerName: printForLater && currentCustomer ? currentCustomer.displayName || 'Customer' : userIdentity.name,
+          customerAvatar: printForLater && currentCustomer ? currentCustomer.photoURL : userIdentity.avatar,
           files: filesForJob,
-          transport: 'supabase',
           status: 'pending',
-          estimatedCost,
+          cost: estimatedCost,
           totalPages: totalPagesCount,
           bwPages: bwPagesCount,
           colorPages: colorPagesCount,
-          paymentMethod: 'none',
-          merchantUpiId: merchantProfile?.upiId || '',
-          merchantName: merchantProfile?.shopName || UPI_NAME,
+          createdAt: new Date().toISOString(),
+          transport: 'supabase',
+          isAnonymous: !printForLater,
+          pickupTag: printForLater ? (pickupCode ? `P-${pickupCode}` : '24h Queue') : `🎭 ${userIdentity.name}`,
+          pickupCode: pickupCode || null,
+          userPhone: null,
+          customerId: currentCustomer?.uid || null,
+          customerEmail: currentCustomer?.email || null,
+          isSavedQueue: printForLater,
+          expiresAt: printForLater ? new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() : null,
         });
 
-        setUploadProgress(100);
-        setJobId(newJobRef.id);
+        const submittedJobId = newJobRef.id;
+        setJobId(submittedJobId);
         setFiles([]);
+        navigate(`/payment?merchantId=${merchantId}&jobId=${submittedJobId}`, {
+          state: {
+            jobId: submittedJobId,
+            merchantId,
+            merchantProfile,
+            files: filesForJob,
+            totalPagesCount,
+            bwPagesCount,
+            colorPagesCount,
+            estimatedCost,
+            pickupCode,
+            printForLater,
+            transport: 'supabase',
+          },
+        });
       }
-
     } catch (error) {
       console.error('Error submitting print job:', error);
       alert(`There was an error sending your print job: ${error.message || 'Please try again'}`);
@@ -410,7 +624,6 @@ export default function UserPrintPage() {
     }
   };
 
-  // Payment claimed step: Customer flags they sent the payment (UPI or Cash)
   const handleClaimPayment = async (method = 'upi') => {
     if (!jobId) return;
     try {
@@ -425,515 +638,853 @@ export default function UserPrintPage() {
     }
   };
 
-  // Fallback UI when merchantId is missing
-  if (!merchantId) {
-    return (
-      <Container maxWidth="sm" sx={{ mt: 8, mb: 4, textAlign: 'center' }}>
-        <Paper elevation={3} sx={{ p: 4, borderRadius: 3 }}>
-          <StorefrontIcon sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
-          <Typography variant="h5" gutterBottom fontWeight="bold">
-            No Print Shop Selected
-          </Typography>
-          <Typography variant="body1" color="text.secondary" paragraph>
-            To print your documents, please scan the QR code displayed at your local print shop counter.
-          </Typography>
-          <Box sx={{ my: 3, p: 2, bgcolor: 'grey.50', borderRadius: 2 }}>
-            <Stack direction="row" spacing={1} justifyContent="center" alignItems="center">
-              <QrCodeScannerIcon color="primary" />
-              <Typography variant="body2" fontWeight="medium">
-                Point your mobile camera at the shop's QuickPrint standee
-              </Typography>
-            </Stack>
-          </Box>
-          <Button component={RouterLink} to="/" variant="outlined" sx={{ mt: 1 }}>
-            Return to Home
-          </Button>
-        </Paper>
-      </Container>
-    );
-  }
-
-  // Loading identity
-  if (!userIdentity) {
-    return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
-        <CircularProgress />
-      </Box>
-    );
-  }
-
-  // Render job status tracking
-  const renderJobStatus = () => {
-    if (jobError) return <Alert severity="error">{jobError}</Alert>;
-    if (!jobData) return <Box sx={{ textAlign: 'center', py: 4 }}><CircularProgress /></Box>;
-
-    switch (jobData.status) {
-      case 'pending':
-        return (
-          <Paper sx={{ p: 4, textAlign: 'center', borderRadius: 2 }}>
-            <CircularProgress size={48} sx={{ mb: 2 }} />
-            <Typography variant="h5" gutterBottom fontWeight="bold">
-              Job Sent to Merchant!
-            </Typography>
-            <Typography color="text.secondary" sx={{ mb: 2 }}>
-              Waiting for the merchant to accept and print your documents...
-            </Typography>
-            <Stack direction="row" spacing={1} justifyContent="center">
-              <Chip
-                label={`Your Name: ${userIdentity?.name}`}
-                color="primary"
-                variant="outlined"
-              />
-              <Chip
-                label={jobData.transport === 'realtime' ? '⚡ Real-Time Fast Lane' : '☁️ Cloud Queue'}
-                color={jobData.transport === 'realtime' ? 'success' : 'info'}
-                variant="filled"
-              />
-            </Stack>
-          </Paper>
-        );
-
-      case 'processing':
-        return (
-          <Paper sx={{ p: 4, textAlign: 'center', borderRadius: 2 }}>
-            <CircularProgress size={48} sx={{ mb: 2, color: 'info.main' }} />
-            <Typography variant="h5" gutterBottom fontWeight="bold" color="info.main">
-              Printing in Progress...
-            </Typography>
-            <Typography color="text.secondary">
-              The merchant is currently printing your documents.
-            </Typography>
-          </Paper>
-        );
-
-      case 'awaitingPayment': {
-        const cost = Number(jobData?.cost ?? estimatedCost ?? 0);
-        const upiUrl = generateUPIUrl(cost, jobData?.merchantUpiId, jobData?.merchantName);
-        const displayUpiId = jobData?.merchantUpiId || merchantProfile?.upiId;
-        const totalPgs = jobData?.totalPages ?? totalPagesCount;
-        const bwPgs = jobData?.bwPages ?? bwPagesCount;
-        const colorPgs = jobData?.colorPages ?? colorPagesCount;
-
-        return (
-          <Paper sx={{ p: 4, textAlign: 'center', borderRadius: 2 }}>
-            <Typography variant="h5" gutterBottom color="primary" fontWeight="bold">
-              Payment Required
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Total {totalPgs} page(s) ({bwPgs} B&W, {colorPgs} Color)
-            </Typography>
-            <Divider sx={{ my: 2 }} />
-
-            <Typography variant="h3" sx={{ my: 1, fontWeight: 'bold' }}>
-              ₹{cost.toFixed(2)}
-            </Typography>
-
-            {/* Payment Method Selector (UPI vs Cash) */}
-            <Box sx={{ width: '100%', mb: 2 }}>
-              <Tabs
-                value={paymentMethodTab}
-                onChange={(_, val) => setPaymentMethodTab(val)}
-                centered
-                sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}
-              >
-                <Tab value="upi" icon={<QrCodeScannerIcon />} iconPosition="start" label="Pay via UPI" />
-                <Tab value="cash" icon={<PaymentsIcon />} iconPosition="start" label="Pay Cash at Counter" />
-              </Tabs>
-            </Box>
-
-            {paymentMethodTab === 'upi' ? (
-              <Box sx={{ mt: 1 }}>
-                {displayUpiId ? (
-                  <>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                      Scan the QR code with any UPI app (GPay, PhonePe, Paytm) or tap below
-                    </Typography>
-
-                    <Box
-                      sx={{
-                        display: 'inline-block',
-                        p: 2,
-                        bgcolor: 'white',
-                        borderRadius: 2,
-                        border: '2px solid',
-                        borderColor: 'primary.main',
-                        mb: 2,
-                      }}
-                    >
-                      <QRCodeSVG value={upiUrl} size={200} level="H" includeMargin />
-                    </Box>
-
-                    <Typography variant="caption" display="block" color="text.secondary" sx={{ mb: 2 }}>
-                      Merchant UPI ID: {displayUpiId}
-                    </Typography>
-
-                    <Button
-                      variant="contained"
-                      size="large"
-                      fullWidth
-                      href={upiUrl}
-                      sx={{
-                        mb: 2,
-                        py: 1.5,
-                        bgcolor: '#5f259f',
-                        '&:hover': { bgcolor: '#4a1d7a' },
-                      }}
-                    >
-                      Pay ₹{cost.toFixed(2)} with UPI App
-                    </Button>
-
-                    <Button
-                      variant="outlined"
-                      size="large"
-                      fullWidth
-                      onClick={() => handleClaimPayment('upi')}
-                      sx={{ py: 1.5 }}
-                    >
-                      I've Completed UPI Payment
-                    </Button>
-                  </>
-                ) : (
-                  <Box sx={{ py: 2 }}>
-                    <Alert severity="info" sx={{ mb: 2 }}>
-                      Digital UPI is not configured for this shop. Please switch to <strong>Pay Cash at Counter</strong>.
-                    </Alert>
-                    <Button
-                      variant="contained"
-                      color="success"
-                      onClick={() => setPaymentMethodTab('cash')}
-                    >
-                      Switch to Cash Payment
-                    </Button>
-                  </Box>
-                )}
-              </Box>
-            ) : (
-              <Box sx={{ mt: 2 }}>
-                <Paper variant="outlined" sx={{ p: 3, mb: 3, bgcolor: 'grey.50', borderRadius: 2 }}>
-                  <PaymentsIcon sx={{ fontSize: 48, color: 'success.main', mb: 1 }} />
-                  <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
-                    Hand Cash to Merchant
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Please pay <strong>₹{cost.toFixed(2)}</strong> in cash directly at the shop counter. Once handed over, tap the button below so the merchant can confirm and release your printouts.
-                  </Typography>
-                </Paper>
-
-                <Button
-                  variant="contained"
-                  color="success"
-                  size="large"
-                  fullWidth
-                  onClick={() => handleClaimPayment('cash')}
-                  sx={{ py: 1.5, fontWeight: 'bold' }}
-                >
-                  I'm Paying ₹{cost.toFixed(2)} Cash at Counter
-                </Button>
-              </Box>
-            )}
-          </Paper>
-        );
-      }
-
-      case 'paymentClaimed': {
-        const isCash = jobData.paymentMethod === 'cash';
-        return (
-          <Paper sx={{ p: 4, textAlign: 'center', borderRadius: 2, bgcolor: isCash ? '#f1f8e9' : '#fff8e1' }}>
-            <HourglassTopIcon sx={{ fontSize: 52, color: isCash ? 'success.main' : 'warning.main', mb: 2 }} />
-            <Typography variant="h5" gutterBottom fontWeight="bold" color={isCash ? 'success.dark' : 'warning.dark'}>
-              {isCash ? 'Cash Payment Requested' : 'Payment Sent! Verifying...'}
-            </Typography>
-            <Typography color="text.secondary" sx={{ mb: 2 }}>
-              {isCash
-                ? `Please hand ₹${Number(jobData?.cost ?? estimatedCost ?? 0).toFixed(2)} in cash to the shopkeeper. They will hand you your printouts upon confirmation.`
-                : 'The merchant is confirming your digital UPI payment. Your printout will be ready for pickup in a moment.'}
-            </Typography>
-            <Stack direction="row" spacing={1} justifyContent="center">
-              <Chip
-                label={`Job #${jobId?.slice(-6) || ''}`}
-                variant="outlined"
-                color={isCash ? 'success' : 'warning'}
-              />
-              <Chip
-                label={isCash ? '💵 Cash at Counter' : '📱 UPI Payment'}
-                color={isCash ? 'success' : 'primary'}
-                variant="filled"
-              />
-            </Stack>
-          </Paper>
-        );
-      }
-
-      case 'paid':
-      case 'completed': {
-        const isCash = jobData?.paymentMethod === 'cash';
-        const totalPgs = jobData?.totalPages ?? totalPagesCount;
-        const bwPgs = jobData?.bwPages ?? bwPagesCount;
-        const colorPgs = jobData?.colorPages ?? colorPagesCount;
-
-        return (
-          <Paper sx={{ p: 4, textAlign: 'center', bgcolor: '#e8f5e9', borderRadius: 2 }}>
-            <CheckCircleOutlineIcon sx={{ fontSize: 56, color: 'success.main', mb: 1 }} />
-            <Typography variant="h5" gutterBottom fontWeight="bold" color="success.main">
-              Print Job Complete!
-            </Typography>
-            <Typography color="text.secondary" sx={{ mb: 2 }}>
-              Payment confirmed (₹{Number(jobData?.cost ?? estimatedCost ?? 0).toFixed(2)}). Please collect your printouts from the counter.
-            </Typography>
-            <Stack direction="row" spacing={1} justifyContent="center" sx={{ mb: 3 }}>
-              <Chip
-                label={isCash ? '💵 Paid Cash' : '📱 Paid via UPI'}
-                color="success"
-                size="small"
-              />
-              <Chip
-                label={`${totalPgs} page(s) (${bwPgs} B&W, ${colorPgs} Color)`}
-                variant="outlined"
-                size="small"
-              />
-            </Stack>
-            <Button
-              variant="contained"
-              color="success"
-              onClick={() => {
-                setJobId(null);
-                setFiles([]);
-              }}
-            >
-              Print More Documents
-            </Button>
-          </Paper>
-        );
-      }
-
-      default:
-        return (
-          <Paper sx={{ p: 3 }}>
-            <Typography>Status: {jobData.status}</Typography>
-          </Paper>
-        );
-    }
+  // Serif styling matching user-flow design
+  const serifHeadlineStyle = {
+    fontFamily: '"Newsreader", Georgia, "Times New Roman", serif',
+    letterSpacing: '-0.015em',
   };
 
   return (
-    <Container maxWidth="md" sx={{ mt: 3, mb: 5 }}>
-      {merchantLoadError && (
-        <Alert severity="error" sx={{ mb: 3 }}>
-          {merchantLoadError}
-        </Alert>
-      )}
+    <Box
+      sx={{
+        minHeight: '100vh',
+        display: 'flex',
+        flexDirection: 'column',
+        bgcolor: isDark ? '#0f172a' : '#f8faff',
+        color: isDark ? '#f8fafc' : '#131b2e',
+        transition: 'background-color 0.2s ease, color 0.2s ease',
+      }}
+    >
+      {/* Top Header */}
+      <Box
+        component="header"
+        sx={{
+          position: 'sticky',
+          top: 0,
+          zIndex: 1100,
+          bgcolor: isDark ? '#1e293b' : '#ffffff',
+          borderBottom: `1px solid ${isDark ? '#334155' : '#e2e8f0'}`,
+          transition: 'all 0.2s ease',
+        }}
+      >
+        <Box
+          sx={{
+            maxWidth: '520px',
+            mx: 'auto',
+            height: 64,
+            px: 2.5,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}
+        >
+          {/* Back Button */}
+          <IconButton
+            edge="start"
+            onClick={() => navigate('/')}
+            aria-label="Go Back"
+            sx={{
+              color: isDark ? '#cbd5e1' : '#475569',
+              '&:hover': { bgcolor: isDark ? '#334155' : '#f1f5f9' },
+            }}
+          >
+            <ArrowBackIcon />
+          </IconButton>
 
-      {/* Merchant Header & Identity Banner */}
-      <Card sx={{ mb: 3, borderRadius: 2, boxShadow: 1 }}>
-        <CardContent sx={{ pb: '16px !important' }}>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
-            <Box>
-              <Typography variant="h6" fontWeight="bold">
-                {merchantProfile?.shopName || 'QuickPrint Shop'}
-              </Typography>
-              <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 0.5 }}>
-                <Box
-                  sx={{
-                    width: 10,
-                    height: 10,
-                    borderRadius: '50%',
-                    bgcolor: isMerchantOnline ? 'success.main' : 'grey.400',
-                  }}
-                />
-                <Typography variant="caption" color={isMerchantOnline ? 'success.main' : 'text.secondary'} fontWeight="600">
-                  {isMerchantOnline ? 'Merchant Online' : 'Merchant Offline'}
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  • ₹{priceBW}/pg B&W • ₹{priceColor}/pg Color
-                </Typography>
-              </Stack>
-            </Box>
-
-            <Paper
-              variant="outlined"
+          {/* Centered Brand */}
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1.25,
+              userSelect: 'none',
+              cursor: 'pointer',
+            }}
+            onClick={() => navigate('/')}
+          >
+            <Box
               sx={{
-                px: 1.5,
-                py: 0.5,
+                width: 36,
+                height: 36,
+                borderRadius: '10px',
+                bgcolor: '#eff6ff',
+                color: '#2563eb',
                 display: 'flex',
                 alignItems: 'center',
-                gap: 1,
-                bgcolor: 'grey.50',
-                borderRadius: 2,
+                justifyContent: 'center',
+                boxShadow: '0 1px 3px rgba(37,99,235,0.12)',
+              }}
+            >
+              <PrintIcon sx={{ fontSize: 20 }} />
+            </Box>
+            <Typography
+              variant="h6"
+              sx={{
+                fontWeight: 800,
+                color: isDark ? '#ffffff' : '#0f172a',
+                fontSize: '1.25rem',
+                letterSpacing: '-0.02em',
+                fontFamily: '"Plus Jakarta Sans", sans-serif',
+              }}
+            >
+              QuickPrint
+            </Typography>
+          </Box>
+
+          {/* Theme Toggle Button */}
+          <IconButton
+            size="medium"
+            onClick={() => setIsDark((prev) => !prev)}
+            aria-label="Toggle theme mode"
+            sx={{
+              width: 40,
+              height: 40,
+              borderRadius: '10px',
+              border: `1px solid ${isDark ? '#475569' : '#e2e8f0'}`,
+              bgcolor: isDark ? '#1e293b' : '#ffffff',
+              color: isDark ? '#cbd5e1' : '#475569',
+              '&:hover': {
+                bgcolor: isDark ? '#334155' : '#f1f5f9',
+              },
+            }}
+          >
+            {isDark ? (
+              <LightModeOutlinedIcon sx={{ fontSize: 20 }} />
+            ) : (
+              <DarkModeOutlinedIcon sx={{ fontSize: 20 }} />
+            )}
+          </IconButton>
+        </Box>
+      </Box>
+
+      {/* Main Container constrained to 520px per user-flow prototype */}
+      <Container
+        component="main"
+        maxWidth={false}
+        sx={{
+          maxWidth: '520px',
+          mx: 'auto',
+          px: { xs: 2, sm: 2.5 },
+          pt: 2.5,
+          pb: 18,
+          flexGrow: 1,
+        }}
+      >
+        {merchantLoadError && (
+          <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }}>
+            {merchantLoadError}
+          </Alert>
+        )}
+
+        {/* 1. Connected Shop & Pickup Tag Card */}
+        <Paper
+          elevation={0}
+          sx={{
+            p: 2,
+            mb: 2.5,
+            borderRadius: '16px',
+            bgcolor: isDark ? '#1e293b' : '#ffffff',
+            border: `1px solid ${isDark ? '#334155' : '#e2e8f0'}`,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 1.5,
+            transition: 'all 0.2s ease',
+          }}
+        >
+          <Box sx={{ minWidth: 0 }}>
+            {/* Online Status Pill */}
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.25 }}>
+              <Box
+                sx={{
+                  width: 7,
+                  height: 7,
+                  borderRadius: '50%',
+                  bgcolor: '#10b981',
+                }}
+              />
+              <Typography
+                variant="caption"
+                sx={{
+                  fontWeight: 700,
+                  color: '#006c49',
+                  fontSize: '0.8rem',
+                }}
+              >
+                Online
+              </Typography>
+            </Box>
+
+            {/* Shop Name */}
+            <Typography
+              variant="subtitle1"
+              noWrap
+              sx={{
+                ...serifHeadlineStyle,
+                fontWeight: 800,
+                color: isDark ? '#ffffff' : '#0f172a',
+                fontSize: '1.05rem',
+              }}
+              title={merchantProfile?.shopName || 'Campus Library Print Station'}
+            >
+              {merchantProfile?.shopName ? `${merchantProfile.shopName.slice(0, 22)}...` : 'Campus Library Print ...'}
+            </Typography>
+
+            {/* Shop Code Tag */}
+            <Typography
+              variant="caption"
+              sx={{
+                color: isDark ? '#94a3b8' : '#64748b',
+                display: 'block',
+                fontSize: '0.8rem',
+                mt: 0.25,
+              }}
+            >
+              Shop: <strong style={{ color: '#2563eb' }}>{merchantProfile?.shopCode || 'QP-8421'}</strong>
+            </Typography>
+          </Box>
+
+          {/* Pickup Tag Card */}
+          <Box
+            sx={{
+              flexShrink: 0,
+              bgcolor: isDark ? '#0f172a' : '#f2f3ff',
+              border: `1px solid ${isDark ? '#334155' : '#e2e7ff'}`,
+              borderRadius: '12px',
+              p: 1.25,
+              textAlign: 'right',
+            }}
+          >
+            <Typography
+              variant="caption"
+              sx={{
+                display: 'block',
+                fontSize: '9.5px',
+                textTransform: 'uppercase',
+                fontWeight: 800,
+                letterSpacing: '0.06em',
+                color: isDark ? '#94a3b8' : '#64748b',
+              }}
+            >
+              PICKUP TAG
+            </Typography>
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 0.5,
+                color: '#2563eb',
+                fontWeight: 700,
+                fontSize: '0.86rem',
+                mt: 0.25,
+              }}
+            >
+              <span>{userIdentity?.avatar || '🎭'}</span>
+              <span style={{ whiteSpace: 'nowrap' }}>{userIdentity?.name || 'Cheerful Iris'}</span>
+              <Tooltip title="Regenerate pickup tag">
+                <IconButton
+                  size="small"
+                  onClick={handleRegenerateName}
+                  sx={{ p: 0.2, color: isDark ? '#94a3b8' : '#64748b', '&:hover': { color: '#2563eb' } }}
+                >
+                  <RefreshIcon sx={{ fontSize: 15 }} />
+                </IconButton>
+              </Tooltip>
+            </Box>
+          </Box>
+        </Paper>
+
+        {/* 2. Files Section */}
+        <Box sx={{ mb: 3 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.25, px: 0.5 }}>
+            <Typography
+              variant="h6"
+              sx={{
+                ...serifHeadlineStyle,
+                fontWeight: 800,
+                color: isDark ? '#ffffff' : '#0f172a',
+                fontSize: '1.15rem',
+              }}
+            >
+              Files
+            </Typography>
+            <Typography variant="caption" sx={{ fontWeight: 600, color: isDark ? '#94a3b8' : '#64748b' }}>
+              Max 50MB
+            </Typography>
+          </Box>
+
+          {/* Dotted Upload Dropzone */}
+          <FileUploader onFilesAdded={handleFilesAdded} hasFiles={files.length > 0} />
+
+          {/* Uploaded File Items */}
+          {files.length > 0 && (
+            <Stack spacing={1.25} sx={{ mt: 1.5 }}>
+              {files.map((fileEntry) => (
+                <UploadedFileItem
+                  key={fileEntry.id}
+                  fileEntry={fileEntry}
+                  onSpecChange={handleSpecChange}
+                  onRemove={handleRemoveFile}
+                />
+              ))}
+            </Stack>
+          )}
+        </Box>
+
+        {/* 3. Print Settings Section */}
+        <Box sx={{ mb: 3 }}>
+          <Typography
+            variant="h6"
+            sx={{
+              ...serifHeadlineStyle,
+              fontWeight: 800,
+              color: isDark ? '#ffffff' : '#0f172a',
+              fontSize: '1.15rem',
+              mb: 1.5,
+              px: 0.5,
+            }}
+          >
+            Print Settings
+          </Typography>
+
+          <Stack spacing={1.5}>
+            {/* Setting 1: Color Mode */}
+            <Paper
+              elevation={0}
+              sx={{
+                p: 2,
+                borderRadius: '16px',
+                bgcolor: isDark ? '#1e293b' : '#ffffff',
+                border: `1px solid ${isDark ? '#334155' : '#e2e8f0'}`,
+              }}
+            >
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <PaletteIcon sx={{ color: '#2563eb', fontSize: 20 }} />
+                  <Typography variant="subtitle2" sx={{ fontWeight: 700, color: isDark ? '#ffffff' : '#0f172a' }}>
+                    Color Mode
+                  </Typography>
+                </Box>
+                <Typography variant="caption" sx={{ color: isDark ? '#94a3b8' : '#64748b', fontSize: '0.78rem' }}>
+                  Default: B&W
+                </Typography>
+              </Box>
+
+              <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.25 }}>
+                {/* Black & White Tile */}
+                <Box
+                  onClick={() => setColorMode('bw')}
+                  sx={{
+                    p: 1.5,
+                    borderRadius: '12px',
+                    border: '2px solid',
+                    borderColor: colorMode === 'bw' ? '#2563eb' : (isDark ? '#334155' : '#e2e8f0'),
+                    bgcolor: colorMode === 'bw' ? (isDark ? 'rgba(37,99,235,0.1)' : '#eff6ff') : 'transparent',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  <Box>
+                    <Typography
+                      variant="body2"
+                      sx={{ fontWeight: 700, color: colorMode === 'bw' ? '#2563eb' : (isDark ? '#ffffff' : '#0f172a') }}
+                    >
+                      Black & White
+                    </Typography>
+                    <Typography variant="caption" sx={{ color: isDark ? '#94a3b8' : '#64748b' }}>
+                      ₹{priceBW} / page
+                    </Typography>
+                  </Box>
+                  {colorMode === 'bw' ? (
+                    <CheckCircleIcon sx={{ color: '#2563eb', fontSize: 20 }} />
+                  ) : (
+                    <RadioButtonUncheckedIcon sx={{ color: isDark ? '#475569' : '#cbd5e1', fontSize: 20 }} />
+                  )}
+                </Box>
+
+                {/* Full Color Tile */}
+                <Box
+                  onClick={() => setColorMode('color')}
+                  sx={{
+                    p: 1.5,
+                    borderRadius: '12px',
+                    border: '2px solid',
+                    borderColor: colorMode === 'color' ? '#2563eb' : (isDark ? '#334155' : '#e2e8f0'),
+                    bgcolor: colorMode === 'color' ? (isDark ? 'rgba(37,99,235,0.1)' : '#eff6ff') : 'transparent',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  <Box>
+                    <Typography
+                      variant="body2"
+                      sx={{ fontWeight: 700, color: colorMode === 'color' ? '#2563eb' : (isDark ? '#ffffff' : '#0f172a') }}
+                    >
+                      Full Color
+                    </Typography>
+                    <Typography variant="caption" sx={{ color: isDark ? '#94a3b8' : '#64748b' }}>
+                      ₹{priceColor} / page
+                    </Typography>
+                  </Box>
+                  {colorMode === 'color' ? (
+                    <CheckCircleIcon sx={{ color: '#2563eb', fontSize: 20 }} />
+                  ) : (
+                    <RadioButtonUncheckedIcon sx={{ color: isDark ? '#475569' : '#cbd5e1', fontSize: 20 }} />
+                  )}
+                </Box>
+              </Box>
+            </Paper>
+
+            {/* Setting 2: Number of Copies Stepper */}
+            <Paper
+              elevation={0}
+              sx={{
+                p: 2,
+                borderRadius: '16px',
+                bgcolor: isDark ? '#1e293b' : '#ffffff',
+                border: `1px solid ${isDark ? '#334155' : '#e2e8f0'}`,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
               }}
             >
               <Box>
-                <Typography variant="caption" color="text.secondary" display="block">
-                  Your Pickup Tag
-                </Typography>
-                <Typography variant="body2" fontWeight="bold">
-                  🎭 {userIdentity.name}
-                </Typography>
-              </Box>
-              <Tooltip title="Change pickup tag">
-                <IconButton size="small" onClick={handleRegenerateName}>
-                  <RefreshIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
-            </Paper>
-          </Box>
-        </CardContent>
-      </Card>
-
-      {/* Main Flow: Upload or Status */}
-      {jobId ? (
-        renderJobStatus()
-      ) : (
-        <>
-          <Typography variant="h5" fontWeight="bold" gutterBottom>
-            Upload Documents
-          </Typography>
-
-          {/* Mode Indicator Banner */}
-          <Alert
-            severity={printForLater ? 'info' : (isRealtimeEligible ? 'success' : 'info')}
-            icon={printForLater ? <CloudQueueIcon /> : (isRealtimeEligible ? <BoltIcon /> : <CloudQueueIcon />)}
-            sx={{ mb: 3, borderRadius: 2 }}
-          >
-            {printForLater ? (
-              <Box>
-                <strong>Mode 2: Cloud Queue (Print for Later — 24h Expiration)</strong>
-                <Typography variant="body2">
-                  Files are saved securely in the Cloud for 24 hours. The merchant can print them when you arrive at the counter.
-                </Typography>
-              </Box>
-            ) : isRealtimeEligible ? (
-              <Box>
-                <strong>Mode 1: Fast Direct Transfer (Instant Print)</strong>
-                <Typography variant="body2">
-                  Merchant is online and files are under 25MB. Files stream directly to merchant PC with zero delay via Cloudflare relay.
-                </Typography>
-              </Box>
-            ) : (
-              <Box>
-                <strong>Mode 2: Cloud Queue (Print when ready — 24h Expiration)</strong>
-                <Typography variant="body2">
-                  {isMerchantOnline
-                    ? 'Total files exceed 25MB. Uploading securely to Cloud Storage.'
-                    : 'Merchant dashboard is offline. Files will be queued in the Cloud for 24 hours and printed once online.'}
-                </Typography>
-              </Box>
-            )}
-          </Alert>
-
-          {/* Print for Later (24h Cloud Queue) Option */}
-          <Paper variant="outlined" sx={{ p: 2, mb: 3, borderRadius: 2, bgcolor: printForLater ? '#f0f7ff' : '#fafafa' }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                <CloudQueueIcon color={printForLater ? 'primary' : 'action'} />
-                <Box>
-                  <Typography variant="subtitle2" fontWeight="bold">
-                    Print for Later (24-Hour Cloud Queue)
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    Send files to shop queue now, print when you reach the shop. Files auto-expire in 24 hours.
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <ContentCopyIcon sx={{ color: '#2563eb', fontSize: 18 }} />
+                  <Typography variant="subtitle2" sx={{ fontWeight: 700, color: isDark ? '#ffffff' : '#0f172a' }}>
+                    Number of Copies
                   </Typography>
                 </Box>
-              </Box>
-              <Switch
-                checked={printForLater}
-                onChange={(e) => setPrintForLater(e.target.checked)}
-                color="primary"
-              />
-            </Box>
-
-            {printForLater && (
-              <Box sx={{ mt: 2, pt: 1.5, borderTop: '1px dashed #ccc' }}>
-                <TextField
-                  label="Contact Mobile Number (Optional)"
-                  placeholder="10-digit mobile number"
-                  size="small"
-                  value={customerPhone}
-                  onChange={(e) => setCustomerPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
-                  helperText="Shopkeeper can look up your queued files using your phone or pickup tag"
-                  sx={{ maxWidth: 360 }}
-                />
-              </Box>
-            )}
-          </Paper>
-
-          <Paper elevation={1} sx={{ p: 2, mb: 3, borderRadius: 2 }}>
-            <FileUploader onFilesAdded={handleFilesAdded} />
-          </Paper>
-
-          {files.length > 0 && (
-            <Box>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                <Typography variant="h6" fontWeight="bold">
-                  Files to Print ({files.length})
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  Total Size: {formatFileSize(totalFilesSize)} / 50MB
+                <Typography variant="caption" sx={{ color: isDark ? '#94a3b8' : '#64748b', display: 'block', mt: 0.25 }}>
+                  Print identical document sets
                 </Typography>
               </Box>
 
-              <List disablePadding>
-                {files.map((fileEntry) => (
-                  <UploadedFileItem
-                    key={fileEntry.id}
-                    fileEntry={fileEntry}
-                    onSpecChange={handleSpecChange}
-                    onRemove={handleRemoveFile}
-                  />
-                ))}
-              </List>
-
-              {isSubmitting && (
-                <Paper sx={{ p: 2, my: 2, bgcolor: 'grey.50', borderRadius: 2 }}>
-                  <Typography variant="body2" color="primary" fontWeight="bold" gutterBottom>
-                    {uploadStatusText || 'Transferring files...'} ({Math.round(uploadProgress)}%)
-                  </Typography>
-                  <LinearProgress variant="determinate" value={uploadProgress} sx={{ height: 8, borderRadius: 4 }} />
-                </Paper>
-              )}
-
-              {/* Bottom Submit Bar */}
-              <Paper
-                elevation={3}
+              {/* Stepper Controls */}
+              <Box
                 sx={{
-                  p: 2.5,
-                  mt: 3,
                   display: 'flex',
-                  justifyContent: 'space-between',
                   alignItems: 'center',
-                  borderRadius: 2,
-                  bgcolor: 'background.paper',
+                  bgcolor: isDark ? '#0f172a' : '#f1f5f9',
+                  borderRadius: '12px',
+                  p: 0.5,
+                  border: `1px solid ${isDark ? '#334155' : '#e2e8f0'}`,
                 }}
               >
-                <Box>
-                  <Typography variant="caption" color="text.secondary">
-                    Total: {totalPagesCount} page(s) ({bwPagesCount} B&W, {colorPagesCount} Color)
-                  </Typography>
-                  <Typography variant="h5" fontWeight="bold" color="primary">
-                    Estimated: ₹{(estimatedCost ?? 0).toFixed(2)}
+                <IconButton
+                  size="small"
+                  disabled={copies <= 1}
+                  onClick={() => setCopies((c) => Math.max(1, c - 1))}
+                  sx={{
+                    width: 32,
+                    height: 32,
+                    borderRadius: '8px',
+                    bgcolor: isDark ? '#1e293b' : '#ffffff',
+                    fontWeight: 800,
+                    boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                  }}
+                >
+                  −
+                </IconButton>
+                <Typography
+                  sx={{
+                    width: 36,
+                    textAlign: 'center',
+                    fontWeight: 800,
+                    fontSize: '1.05rem',
+                    color: isDark ? '#ffffff' : '#0f172a',
+                  }}
+                >
+                  {copies}
+                </Typography>
+                <IconButton
+                  size="small"
+                  onClick={() => setCopies((c) => Math.min(100, c + 1))}
+                  sx={{
+                    width: 32,
+                    height: 32,
+                    borderRadius: '8px',
+                    bgcolor: isDark ? '#1e293b' : '#ffffff',
+                    fontWeight: 800,
+                    boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                  }}
+                >
+                  +
+                </IconButton>
+              </Box>
+            </Paper>
+
+            {/* Setting 3: Page Selection */}
+            <Paper
+              elevation={0}
+              sx={{
+                p: 2,
+                borderRadius: '16px',
+                bgcolor: isDark ? '#1e293b' : '#ffffff',
+                border: `1px solid ${isDark ? '#334155' : '#e2e8f0'}`,
+              }}
+            >
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+                <AutoStoriesIcon sx={{ color: '#2563eb', fontSize: 18 }} />
+                <Typography variant="subtitle2" sx={{ fontWeight: 700, color: isDark ? '#ffffff' : '#0f172a' }}>
+                  Page Selection
+                </Typography>
+              </Box>
+
+              <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 1 }}>
+                <Box
+                  onClick={() => setRangeMode('all')}
+                  sx={{
+                    py: 1.25,
+                    px: 1,
+                    textAlign: 'center',
+                    borderRadius: '10px',
+                    border: '2px solid',
+                    borderColor: rangeMode === 'all' ? '#2563eb' : (isDark ? '#334155' : '#e2e8f0'),
+                    bgcolor: rangeMode === 'all' ? (isDark ? 'rgba(37,99,235,0.1)' : '#eff6ff') : 'transparent',
+                    color: rangeMode === 'all' ? '#2563eb' : (isDark ? '#cbd5e1' : '#475569'),
+                    fontWeight: 700,
+                    fontSize: '0.82rem',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  All ({totalBasePages})
+                </Box>
+                <Box
+                  onClick={() => setRangeMode('custom')}
+                  sx={{
+                    py: 1.25,
+                    px: 1,
+                    textAlign: 'center',
+                    borderRadius: '10px',
+                    border: '2px solid',
+                    borderColor: rangeMode === 'custom' ? '#2563eb' : (isDark ? '#334155' : '#e2e8f0'),
+                    bgcolor: rangeMode === 'custom' ? (isDark ? 'rgba(37,99,235,0.1)' : '#eff6ff') : 'transparent',
+                    color: rangeMode === 'custom' ? '#2563eb' : (isDark ? '#cbd5e1' : '#475569'),
+                    fontWeight: 700,
+                    fontSize: '0.82rem',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  Custom Range
+                </Box>
+                <Box
+                  onClick={() => setRangeMode('odd_even')}
+                  sx={{
+                    py: 1.25,
+                    px: 1,
+                    textAlign: 'center',
+                    borderRadius: '10px',
+                    border: '2px solid',
+                    borderColor: rangeMode === 'odd_even' ? '#2563eb' : (isDark ? '#334155' : '#e2e8f0'),
+                    bgcolor: rangeMode === 'odd_even' ? (isDark ? 'rgba(37,99,235,0.1)' : '#eff6ff') : 'transparent',
+                    color: rangeMode === 'odd_even' ? '#2563eb' : (isDark ? '#cbd5e1' : '#475569'),
+                    fontWeight: 700,
+                    fontSize: '0.82rem',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  Odd / Even
+                </Box>
+              </Box>
+
+              {/* Custom Range Subsegment */}
+              {rangeMode === 'custom' && (
+                <Box sx={{ mt: 1.5, pt: 1.5, borderTop: `1px dashed ${isDark ? '#334155' : '#e2e8f0'}` }}>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    placeholder="e.g. 1-5, 8, 11-14"
+                    value={customRange}
+                    onChange={(e) => setCustomRange(e.target.value.replace(/[^0-9,-]/g, ''))}
+                    sx={{
+                      '& input': { fontFamily: 'monospace', fontSize: '0.85rem' },
+                    }}
+                  />
+                  <Typography variant="caption" sx={{ color: '#2563eb', fontWeight: 700, mt: 0.5, display: 'block' }}>
+                    {activeSelectedPages} pages selected
                   </Typography>
                 </Box>
+              )}
 
-                <Button
-                  variant="contained"
-                  size="large"
-                  onClick={handleProceed}
-                  disabled={isSubmitting || files.length === 0}
-                  startIcon={printForLater ? <CloudQueueIcon /> : (isRealtimeEligible ? <BoltIcon /> : <CloudQueueIcon />)}
-                  sx={{ px: 4, py: 1.2, fontWeight: 'bold' }}
+              {/* Odd / Even Subsegment */}
+              {rangeMode === 'odd_even' && (
+                <Box sx={{ mt: 1.5, pt: 1.5, borderTop: `1px dashed ${isDark ? '#334155' : '#e2e8f0'}` }}>
+                  <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1 }}>
+                    <Button
+                      size="small"
+                      variant={oddEvenChoice === 'odd' ? 'contained' : 'outlined'}
+                      onClick={() => setOddEvenChoice('odd')}
+                      sx={{
+                        textTransform: 'none',
+                        fontWeight: 700,
+                        bgcolor: oddEvenChoice === 'odd' ? '#2563eb' : 'transparent',
+                        borderColor: '#2563eb',
+                        color: oddEvenChoice === 'odd' ? '#fff' : '#2563eb',
+                      }}
+                    >
+                      Odd Pages ({Math.ceil(totalBasePages / 2)})
+                    </Button>
+                    <Button
+                      size="small"
+                      variant={oddEvenChoice === 'even' ? 'contained' : 'outlined'}
+                      onClick={() => setOddEvenChoice('even')}
+                      sx={{
+                        textTransform: 'none',
+                        fontWeight: 700,
+                        bgcolor: oddEvenChoice === 'even' ? '#2563eb' : 'transparent',
+                        borderColor: '#2563eb',
+                        color: oddEvenChoice === 'even' ? '#fff' : '#2563eb',
+                      }}
+                    >
+                      Even Pages ({Math.floor(totalBasePages / 2)})
+                    </Button>
+                  </Box>
+                </Box>
+              )}
+            </Paper>
+
+            {/* Setting 4: Double Sided (Duplex) */}
+            <Paper
+              elevation={0}
+              sx={{
+                p: 2,
+                borderRadius: '16px',
+                bgcolor: isDark ? '#1e293b' : '#ffffff',
+                border: `1px solid ${isDark ? '#334155' : '#e2e8f0'}`,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+              }}
+            >
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                <Box
+                  sx={{
+                    width: 38,
+                    height: 38,
+                    borderRadius: '10px',
+                    bgcolor: isDark ? '#0f172a' : '#eff6ff',
+                    color: '#2563eb',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
                 >
-                  {isSubmitting
-                    ? 'Sending...'
-                    : printForLater
-                    ? 'Queue in Cloud (24h)'
-                    : isRealtimeEligible
-                    ? 'Instant Stream & Print'
-                    : 'Send to Print Queue'}
-                </Button>
-              </Paper>
+                  <FlipToBackIcon sx={{ fontSize: 20 }} />
+                </Box>
+                <Box>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Typography variant="subtitle2" sx={{ fontWeight: 700, color: isDark ? '#ffffff' : '#0f172a' }}>
+                      Double Sided (Duplex)
+                    </Typography>
+                    <Box
+                      sx={{
+                        px: 1,
+                        py: 0.25,
+                        borderRadius: 999,
+                        bgcolor: '#dcfce7',
+                        color: '#15803d',
+                        fontWeight: 700,
+                        fontSize: '10px',
+                      }}
+                    >
+                      Eco Choice
+                    </Box>
+                  </Box>
+                  <Typography variant="caption" sx={{ color: isDark ? '#94a3b8' : '#64748b' }}>
+                    Print both front & back to save paper
+                  </Typography>
+                </Box>
+              </Box>
+
+              <Switch
+                checked={duplex}
+                onChange={(e) => setDuplex(e.target.checked)}
+                sx={{
+                  '& .MuiSwitch-switchBase.Mui-checked': {
+                    color: '#2563eb',
+                  },
+                  '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
+                    backgroundColor: '#2563eb',
+                  },
+                }}
+              />
+            </Paper>
+
+            {/* Setting 5: Zero Data Retention Guarantee Card */}
+            <Paper
+              elevation={0}
+              sx={{
+                p: 2,
+                borderRadius: '16px',
+                bgcolor: isDark ? 'rgba(16,185,129,0.06)' : '#f0fdf4',
+                border: '1.5px solid #6ee7b7',
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: 1.5,
+              }}
+            >
+              <Box
+                sx={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: '10px',
+                  bgcolor: '#10b981',
+                  color: '#ffffff',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                  mt: 0.25,
+                }}
+              >
+                <ShieldIcon sx={{ fontSize: 20 }} />
+              </Box>
+              <Box>
+                <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#006c49' }}>
+                  Zero Data Retention Guarantee
+                </Typography>
+                <Typography variant="caption" sx={{ color: isDark ? '#cbd5e1' : '#475569', display: 'block', mt: 0.25, lineHeight: 1.45 }}>
+                  Files are transferred via encrypted tunnels and shredded permanently right after physical printing is completed.
+                </Typography>
+              </Box>
+            </Paper>
+          </Stack>
+        </Box>
+      </Container>
+
+      {/* Sticky Bottom Action Dock */}
+      <Box
+        sx={{
+          position: 'fixed',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          zIndex: 1100,
+          bgcolor: isDark ? 'rgba(30, 41, 59, 0.95)' : 'rgba(255, 255, 255, 0.95)',
+          backdropFilter: 'blur(12px)',
+          borderTop: `1px solid ${isDark ? '#334155' : '#e2e8f0'}`,
+          py: 1.5,
+          px: 2,
+          boxShadow: '0 -4px 20px rgba(15, 23, 42, 0.08)',
+        }}
+      >
+        <Box sx={{ maxWidth: '520px', mx: 'auto', display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+          {/* Centered Brand Title */}
+          <Typography
+            variant="caption"
+            sx={{
+              textAlign: 'center',
+              fontWeight: 800,
+              color: isDark ? '#cbd5e1' : '#0f172a',
+              letterSpacing: '-0.01em',
+              fontSize: '0.8rem',
+            }}
+          >
+            QuickPrint
+          </Typography>
+
+          {/* Primary Action Button */}
+          <Button
+            variant="contained"
+            fullWidth
+            onClick={handleProceed}
+            disabled={isSubmitting || files.length === 0}
+            startIcon={<LockIcon sx={{ fontSize: 18 }} />}
+            endIcon={<ArrowForwardIcon sx={{ fontSize: 18 }} />}
+            sx={{
+              height: 50,
+              borderRadius: '12px',
+              bgcolor: '#2563eb',
+              color: '#ffffff',
+              fontWeight: 700,
+              fontSize: '0.92rem',
+              textTransform: 'none',
+              boxShadow: '0 4px 14px rgba(37,99,235,0.25)',
+              '&:hover': { bgcolor: '#1d4ed8' },
+            }}
+          >
+            {files.length === 0 ? 'Upload a file to continue' : 'Continue to Payment'}
+          </Button>
+
+          {/* Footer Indicators */}
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 1.5,
+              fontSize: '11px',
+              color: isDark ? '#94a3b8' : '#64748b',
+              fontWeight: 600,
+              mt: 0.25,
+            }}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <BoltIcon sx={{ fontSize: 14, color: '#10b981' }} />
+              <span>Instant printer release</span>
             </Box>
-          )}
-        </>
-      )}
-    </Container>
+            <span>•</span>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <span>⏱</span>
+              <span>24h pickup window</span>
+            </Box>
+          </Box>
+        </Box>
+      </Box>
+
+      {/* Privacy Dialog */}
+      <Dialog open={privacyDialogOpen} onClose={() => setPrivacyDialogOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontWeight: 700 }}>
+          Privacy & Security
+          <IconButton size="small" onClick={() => setPrivacyDialogOpen(false)}>
+            <CloseIcon fontSize="small" />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent dividers>
+          <Typography variant="body2" paragraph>
+            <strong>Zero Data Retention:</strong> QuickPrint does not store your documents permanently. Once printed or after 24 hours in the cloud queue, documents are shredded automatically.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setPrivacyDialogOpen(false)}>Close</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Help Dialog */}
+      <Dialog open={helpDialogOpen} onClose={() => setHelpDialogOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontWeight: 700 }}>
+          Need Help?
+          <IconButton size="small" onClick={() => setHelpDialogOpen(false)}>
+            <CloseIcon fontSize="small" />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent dividers>
+          <Typography variant="body2" paragraph>
+            <strong>Instant Counter Print:</strong> Show your Pickup Tag (e.g. 🎭 Cheerful Iris) to the shopkeeper. They will print your documents immediately.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setHelpDialogOpen(false)}>Close</Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
+  );
+}
+
+export default function UserPrintPage(props) {
+  return (
+    <CustomerAuthProvider>
+      <UserPrintPageContent {...props} />
+    </CustomerAuthProvider>
   );
 }

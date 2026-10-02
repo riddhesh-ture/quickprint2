@@ -6,6 +6,9 @@ import { Box, CircularProgress } from '@mui/material';
 // Lazy-loaded Pages for code-splitting
 const HomePage = lazy(() => import('./pages/HomePage'));
 const UserPrintPage = lazy(() => import('./pages/UserPrintPage'));
+const PaymentSelectionPage = lazy(() => import('./pages/PaymentSelectionPage'));
+const OrderReceiptPendingPage = lazy(() => import('./pages/OrderReceiptPendingPage'));
+const OrderReceiptCompletedPage = lazy(() => import('./pages/OrderReceiptCompletedPage'));
 const LoginPage = lazy(() => import('./pages/LoginPage'));
 const SignupPage = lazy(() => import('./pages/SignupPage'));
 const MerchantDashboardPage = lazy(() => import('./pages/MerchantDashboardPage'));
@@ -32,6 +35,9 @@ export default function App() {
         {/* Public Routes - Zero Firebase / Zero Blocking Spinners */}
         <Route path="/" element={<HomePage />} />
         <Route path="/print" element={<UserPrintPage />} />
+        <Route path="/payment" element={<PaymentSelectionPage />} />
+        <Route path="/receipt/pending" element={<OrderReceiptPendingPage />} />
+        <Route path="/receipt/completed" element={<OrderReceiptCompletedPage />} />
 
         {/* Merchant Routes wrapped in AuthProvider */}
         <Route element={<MerchantAuthWrapper />}>
