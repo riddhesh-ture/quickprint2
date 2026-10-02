@@ -8,6 +8,7 @@ export default function PrintQueue({
   onAcceptJob,
   onCompleteJob,
   onConfirmPayment,
+  onDonePaid,
   onDeleteJob,
   processingJobId,
 }) {
@@ -37,6 +38,7 @@ export default function PrintQueue({
             onAcceptJob={onAcceptJob}
             onCompleteJob={onCompleteJob}
             onConfirmPayment={onConfirmPayment}
+            onDonePaid={onDonePaid}
             onDeleteJob={onDeleteJob}
             isProcessing={processingJobId === job.id}
           />

@@ -437,6 +437,24 @@ export default function MerchantDashboardPage() {
     }
   };
 
+  // 1-Click "Done (Paid)" workflow: confirms payment, increments stats, completes job, and purges IndexedDB blobs
+  const handleDonePaid = async (job) => {
+    if (!job) return;
+    try {
+      await confirmPaymentAndIncrementStats(job.id, merchantId, job.cost || 0, job.totalPages || 1);
+      await completePrintJob(job.id);
+      await cleanupJobFiles(job);
+      setSnackbar({
+        open: true,
+        message: `Job ${job.id.slice(-6)} marked Done (Paid) & memory purged!`,
+        severity: 'success',
+      });
+    } catch (e) {
+      console.error('Done (Paid) workflow error:', e);
+      setSnackbar({ open: true, message: 'Failed to complete job', severity: 'error' });
+    }
+  };
+
   // Merchant verifies customer's payment claim
   const handleConfirmPayment = async (jobId) => {
     const job = jobs?.find(j => j.id === jobId);
@@ -622,6 +640,7 @@ export default function MerchantDashboardPage() {
             onAcceptJob={handleAcceptJob}
             onCompleteJob={handleCompleteJob}
             onConfirmPayment={handleConfirmPayment}
+            onDonePaid={handleDonePaid}
             onDeleteJob={handleDeleteJob}
             processingJobId={processingJobId}
           />

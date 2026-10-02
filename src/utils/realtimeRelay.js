@@ -145,8 +145,8 @@ export class RealtimeRelay {
       authToken = this.token;
     }
 
-    // If already connected to same room, role, and token, return
-    if (this.ws && this.shopId === shopId && this.role === role && this.token === authToken && this.isConnected) {
+    // If already connected or connecting to same room, role, and token, return
+    if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING) && this.shopId === shopId && this.role === role && this.token === authToken) {
       return;
     }
 
