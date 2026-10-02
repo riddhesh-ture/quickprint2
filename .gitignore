@@ -1,30 +1,61 @@
+# Dependencies and package manager output
+node_modules/
+.pnpm-store/
+.pnpm-debug.log*
+
+# Build outputs
+/dist/
+/dist-ssr/
+/build/
+/out/
+/.next/
+/.nuxt/
+/.vite/
+/.parcel-cache/
+/.cache/
+coverage/
+*.tsbuildinfo
+
 # Logs
-logs
+logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
-AUDIT_REPORT.md
-PROGRESS.md
-node_modules
-dist
-dist-ssr
+
+# Local environment variables
+.env
+.env.*
 *.local
 
-# Editor directories and files
+# Cloudflare / deployment tooling
+.wrangler/
+.cloudflare/
+.firebase/
+
+# Project-local planning / verification artifacts
+PROGRESS.md
+QUICKPRINT_FINAL_MASTER_PLAN.md
+user-flow/
+tests/
+supabase/migrations/
+
+# Editor / OS files
 .vscode/*
 !.vscode/extensions.json
-.idea
+.idea/
 .DS_Store
+Thumbs.db
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
-*.sw?
+*.swp
+*.swo
 
-# Local Environment Variables
-.env
-.env.local
-.env.*.local
+# Temporary files
+*.tmp
+*.temp
+*.pid
