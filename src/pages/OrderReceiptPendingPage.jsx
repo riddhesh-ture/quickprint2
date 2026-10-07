@@ -2,6 +2,8 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams, useLocation, useNavigate } from 'react-router-dom';
 import { Container, Box, Typography, Button, Divider, Alert, Tooltip } from '@mui/material';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 import RawCheckCircleIcon from '@mui/icons-material/CheckCircle';
 import RawWarningAmberIcon from '@mui/icons-material/WarningAmber';
 import RawPrintIcon from '@mui/icons-material/Print';
@@ -137,6 +139,31 @@ export default function OrderReceiptPendingPage() {
 
   const isCompleted = status === 'completed' || status === 'paid';
   const isPrinting = status === 'printing';
+
+  const handleDownloadPDF = async () => {
+    const element = document.getElementById('receipt-card-to-print');
+    if (!element) return;
+
+    // Add a temporary class to ensure it's rendered properly for canvas
+    element.style.padding = '20px';
+    element.style.background = '#ffffff';
+
+    const canvas = await html2canvas(element, { scale: 2 });
+
+    // Restore styling
+    element.style.padding = '';
+    element.style.background = '';
+
+    const imgData = canvas.toDataURL('image/png');
+    const pdf = new jsPDF({
+      orientation: 'portrait',
+      unit: 'px',
+      format: [canvas.width, canvas.height]
+    });
+
+    pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+    pdf.save(`QuickPrint_Receipt_${order.tokenNumber || 'Download'}.pdf`);
+  };
 
   const handleCopyToken = () => {
     navigator.clipboard.writeText(order.tokenNumber);
@@ -293,6 +320,7 @@ export default function OrderReceiptPendingPage() {
         </PrintCard>
 
         {/* 3. Itemized Receipt Card */}
+        <Box id="receipt-card-to-print">
         <PrintCard title="Receipt Details" subtitle={`Station: ${order.merchantName || 'QuickPrint'}`}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
             <Typography variant="body2" sx={{ color: colors.textSecondary }}>File Name</Typography>
@@ -316,13 +344,14 @@ export default function OrderReceiptPendingPage() {
             <Typography variant="h6" sx={{ fontWeight: 800, color: colors.primary }}>₹{order.amount}</Typography>
           </Box>
         </PrintCard>
+        </Box>
 
         {/* 4. Action Buttons */}
         <Box sx={{ display: 'flex', gap: 1.5 }}>
           <Button
             fullWidth
             variant="outlined"
-            onClick={() => window.print()}
+            onClick={handleDownloadPDF}
             startIcon={<PrintIcon />}
             sx={{
               py: 1.25,

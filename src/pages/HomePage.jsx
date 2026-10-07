@@ -13,6 +13,8 @@ import {
   Dialog,
   DialogTitle,
   DialogContent,
+  Snackbar,
+  Alert,
 } from '@mui/material';
 import RawQrCodeScannerIcon from '@mui/icons-material/QrCodeScanner';
 import RawArrowForwardIcon from '@mui/icons-material/ArrowForward';
@@ -54,6 +56,7 @@ export default function HomePage() {
   const [inputCode, setInputCode] = useState('');
   const [codeLoading, setCodeLoading] = useState(false);
   const [codeError, setCodeError] = useState(null);
+  const [showErrorToast, setShowErrorToast] = useState(false);
   const [savedShops, setSavedShops] = useState([]);
   const [scannerOpen, setScannerOpen] = useState(false);
   const [privacyOpen, setPrivacyOpen] = useState(false);
@@ -101,12 +104,14 @@ export default function HomePage() {
         handleSelectShop(DEFAULT_DEMO_SHOP);
       } else {
         setCodeError('Shop code not found. Please verify the 6-character code.');
+        setShowErrorToast(true);
       }
     } catch {
       if (trimmed.includes('8421') || trimmed.includes('DEMO')) {
         handleSelectShop(DEFAULT_DEMO_SHOP);
       } else {
-        setCodeError('Could not verify shop. Try again or scan QR.');
+        setCodeError('Could not verify shop connection. Please try again or scan the QR code.');
+        setShowErrorToast(true);
       }
     } finally {
       setCodeLoading(false);
@@ -117,6 +122,13 @@ export default function HomePage() {
     e.stopPropagation();
     const updated = removeSavedShop(shopId);
     setSavedShops(updated);
+  };
+
+  const handleCloseToast = (event, reason) => {
+    if (reason === 'clickaway') {
+      return;
+    }
+    setShowErrorToast(false);
   };
 
   const displayShops = savedShops.length > 0 ? savedShops : [DEFAULT_DEMO_SHOP];
@@ -137,10 +149,17 @@ export default function HomePage() {
             <TextField
               fullWidth
               value={inputCode}
-              onChange={(e) => setInputCode(e.target.value.toUpperCase())}
+              onChange={(e) => {
+                setInputCode(e.target.value.toUpperCase());
+                if (codeError) {
+                  setCodeError(null);
+                  setShowErrorToast(false);
+                }
+              }}
               placeholder="e.g. QP-8421"
               error={Boolean(codeError)}
-              helperText={codeError}
+              // Hide helperText to rely on the Snackbar for a cleaner look
+              // helperText={codeError}
               inputProps={{
                 maxLength: 10,
                 style: { textAlign: 'center', fontSize: '1.25rem', fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase' },
@@ -263,6 +282,18 @@ export default function HomePage() {
         onOpenPrivacy={() => setPrivacyOpen(true)}
         onOpenHelp={() => setHelpOpen(true)}
       />
+
+      {/* Error Toast Notification */}
+      <Snackbar
+        open={showErrorToast}
+        autoHideDuration={4000}
+        onClose={handleCloseToast}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert onClose={handleCloseToast} severity="error" sx={{ width: '100%', fontWeight: 600 }}>
+          {codeError}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }

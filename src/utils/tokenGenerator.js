@@ -38,8 +38,8 @@ export function generateDailyTokenNumber() {
     }
 
     const payload = JSON.stringify({ date: today, counter });
-    try { sessionStorage.setItem(TOKEN_STORAGE_KEY, payload); } catch {}
-    try { localStorage.setItem(TOKEN_STORAGE_KEY, payload); } catch {}
+    try { sessionStorage.setItem(TOKEN_STORAGE_KEY, payload); } catch (e) { /* ignore */ }
+    try { localStorage.setItem(TOKEN_STORAGE_KEY, payload); } catch (e) { /* ignore */ }
 
     return counter;
   } catch {
