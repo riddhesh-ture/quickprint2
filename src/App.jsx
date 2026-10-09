@@ -3,6 +3,7 @@ import React, { Suspense, lazy } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { Box, CircularProgress } from '@mui/material';
 import { ThemeContextProvider } from './context/ThemeContext';
+import ErrorBoundary from './components/ErrorBoundary';
 
 // Lazy-loaded Pages for code-splitting
 const HomePage = lazy(() => import('./pages/HomePage'));
@@ -32,32 +33,34 @@ const RouteLoader = () => (
 export default function App() {
   return (
     <ThemeContextProvider>
-      <Suspense fallback={<RouteLoader />}>
-      <Routes>
-        {/* Public Routes - Zero Firebase / Zero Blocking Spinners */}
-        <Route path="/" element={<HomePage />} />
-        <Route path="/print" element={<UserPrintPage />} />
-        <Route path="/payment" element={<PaymentSelectionPage />} />
-        <Route path="/receipt/pending" element={<OrderReceiptPendingPage />} />
-        <Route path="/receipt/completed" element={<OrderReceiptCompletedPage />} />
+      <ErrorBoundary>
+        <Suspense fallback={<RouteLoader />}>
+        <Routes>
+          {/* Public Routes - Zero Firebase / Zero Blocking Spinners */}
+          <Route path="/" element={<HomePage />} />
+          <Route path="/print" element={<UserPrintPage />} />
+          <Route path="/payment" element={<PaymentSelectionPage />} />
+          <Route path="/receipt/pending" element={<OrderReceiptPendingPage />} />
+          <Route path="/receipt/completed" element={<OrderReceiptCompletedPage />} />
 
-        {/* Merchant Routes wrapped in AuthProvider */}
-        <Route element={<MerchantAuthWrapper />}>
-          <Route path="/merchant/login" element={<LoginPage />} />
-          <Route path="/merchant/signup" element={<SignupPage />} />
-          <Route element={<MerchantProtectedRoute />}>
-            <Route element={<MerchantLayout />}>
-              <Route path="/merchant/dashboard" element={<MerchantDashboardPage />} />
-              <Route path="/merchant/analytics" element={<MerchantAnalyticsPage />} />
-              <Route path="/merchant/settings" element={<MerchantSettingsPage />} />
+          {/* Merchant Routes wrapped in AuthProvider */}
+          <Route element={<MerchantAuthWrapper />}>
+            <Route path="/merchant/login" element={<LoginPage />} />
+            <Route path="/merchant/signup" element={<SignupPage />} />
+            <Route element={<MerchantProtectedRoute />}>
+              <Route element={<MerchantLayout />}>
+                <Route path="/merchant/dashboard" element={<MerchantDashboardPage />} />
+                <Route path="/merchant/analytics" element={<MerchantAnalyticsPage />} />
+                <Route path="/merchant/settings" element={<MerchantSettingsPage />} />
+              </Route>
             </Route>
           </Route>
-        </Route>
 
-        {/* Fallback */}
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </Suspense>
+          {/* Fallback */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Suspense>
+      </ErrorBoundary>
     </ThemeContextProvider>
   );
 }

@@ -79,7 +79,7 @@ export default function JobItem({
   const isRealtime = job.transport === 'realtime';
   const tokenDisplay = job.tokenNumber || (job.dailyToken ? `#${job.dailyToken}-${job.pin || '8421'}` : `#${job.id.slice(-4)}`);
   const pinDisplay = job.pin || (job.pickupCode ? job.pickupCode.replace(/^P-/, '') : null);
-  const phoneDisplay = job.customerPhone || job.userPhone;
+  const phoneDisplay = job. || job.userPhone;
 
   return (
     <ListItem sx={{ flexDirection: 'column', alignItems: 'stretch', borderBottom: '1px solid #eee', py: 1.5 }}>
@@ -88,7 +88,7 @@ export default function JobItem({
           primary={
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
               <Typography variant="subtitle1" fontWeight="bold">
-                🎭 {job.userName || job.customerName || 'Customer'}
+                 {job.userName || 'Customer'}
               </Typography>
               <Chip
                 size="small"
@@ -113,7 +113,7 @@ export default function JobItem({
                 <Chip
                   size="small"
                   variant="outlined"
-                  label={`📞 ${phoneDisplay}`}
+                  label={` ${phoneDisplay}`}
                   color="default"
                 />
               )}
@@ -168,7 +168,7 @@ export default function JobItem({
                     <FileSpecDetail label="Doc Pages" value={file.specs.pageCount} />
                   )}
                   <FileSpecDetail label="Color" value={file.specs?.color === 'color' ? 'Color' : 'B&W'} />
-                  <FileSpecDetail label="Sides" value={file.specs?.sides === 'double' ? 'Double-Sided' : 'Single-Sided'} />
+                  <FileSpecDetail label="Sides" value={file.specs?.duplex || file.specs?.sides === 'double' ? 'Double-Sided (Duplex)' : 'Single-Sided'} />
                 </Box>
               </ListItem>
               {index < (job.files?.length || 0) - 1 && <Divider />}

@@ -393,7 +393,7 @@ export default function SignupPage() {
               onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
               fullWidth
               required
-              InputProps={{
+              inputprops={{
                 startAdornment: <InputAdornment position="start">+91</InputAdornment>,
               }}
             />
@@ -463,7 +463,7 @@ export default function SignupPage() {
                   }
                 }}
                 fullWidth
-                InputProps={{
+                inputprops={{
                   startAdornment: <InputAdornment position="start">₹</InputAdornment>,
                 }}
               />
@@ -477,7 +477,7 @@ export default function SignupPage() {
                   }
                 }}
                 fullWidth
-                InputProps={{
+                inputprops={{
                   startAdornment: <InputAdornment position="start">₹</InputAdornment>,
                 }}
               />

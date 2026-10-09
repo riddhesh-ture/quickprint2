@@ -155,42 +155,57 @@ export function getAcceptString() {
 }
 
 /**
- * Parse page range string (e.g., "1-5", "1,3,5", "all", or "") against total document pages
+ * Parse page range string (e.g., "1-5", "1,3,5", "all", or "") against total document pages.
+ * When duplex is true, sheet count is halved (Math.ceil(pages / 2)).
  * @param {number} totalDocumentPages
  * @param {string} pagesSpec
- * @returns {number} Number of billable pages selected
+ * @param {boolean} duplex
+ * @returns {number} Number of billable pages/sheets selected
  */
-export function calculateBillablePages(totalDocumentPages = 1, pagesSpec = '') {
-  if (!pagesSpec || typeof pagesSpec !== 'string' || pagesSpec.trim() === '' || pagesSpec.trim().toLowerCase() === 'all') {
-    return Math.max(1, totalDocumentPages || 1);
-  }
+export function calculateBillablePages(totalDocumentPages = 1, pagesSpec = '', duplex = false) {
+  let pages = Math.max(1, totalDocumentPages || 1);
 
-  const clean = pagesSpec.replace(/\s+/g, '');
-  const parts = clean.split(',');
-  const selectedPages = new Set();
+  if (pagesSpec && typeof pagesSpec === 'string' && pagesSpec.trim() !== '' && pagesSpec.trim().toLowerCase() !== 'all') {
+    const clean = pagesSpec.replace(/\s+/g, '');
+    const parts = clean.split(',');
+    const selectedPages = new Set();
 
-  for (const part of parts) {
-    if (!part) continue;
-    if (part.includes('-')) {
-      const [startStr, endStr] = part.split('-');
-      const start = parseInt(startStr, 10);
-      const end = parseInt(endStr, 10);
-      if (!isNaN(start) && !isNaN(end) && start <= end) {
-        const minP = Math.max(1, start);
-        const maxP = totalDocumentPages ? Math.min(totalDocumentPages, end) : end;
-        for (let p = minP; p <= maxP; p++) {
+    for (const part of parts) {
+      if (!part) continue;
+      if (part.includes('-')) {
+        const [startStr, endStr] = part.split('-');
+        const start = parseInt(startStr, 10);
+        const end = parseInt(endStr, 10);
+        if (!isNaN(start) && !isNaN(end) && start <= end) {
+          const minP = Math.max(1, start);
+          const maxP = totalDocumentPages ? Math.min(totalDocumentPages, end) : end;
+          for (let p = minP; p <= maxP; p++) {
+            selectedPages.add(p);
+          }
+        }
+      } else {
+        const p = parseInt(part, 10);
+        if (!isNaN(p) && p >= 1 && (!totalDocumentPages || p <= totalDocumentPages)) {
           selectedPages.add(p);
         }
       }
-    } else {
-      const p = parseInt(part, 10);
-      if (!isNaN(p) && p >= 1 && (!totalDocumentPages || p <= totalDocumentPages)) {
-        selectedPages.add(p);
-      }
     }
+    pages = selectedPages.size > 0 ? selectedPages.size : Math.max(1, totalDocumentPages || 1);
   }
 
-  return selectedPages.size > 0 ? selectedPages.size : Math.max(1, totalDocumentPages || 1);
+  if (duplex) {
+    return Math.ceil(pages / 2);
+  }
+  return pages;
+}
+
+/**
+ * Calculate sheets required for duplex printing (halved pages)
+ * @param {number} pages
+ * @returns {number}
+ */
+export function calculateDuplexSheets(pages = 1) {
+  return Math.max(1, Math.ceil((pages || 1) / 2));
 }
 
 /**

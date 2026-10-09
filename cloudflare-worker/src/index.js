@@ -158,7 +158,7 @@ export class PrintRoom {
   constructor(state, env) {
     this.state = state;
     this.env = env;
-    this.sessions = new Map(); // ws -> { role: 'merchant' | 'customer', authenticated: boolean, joinedAt: number }
+    this.sessions = new Map(); // ws -> { role: 'merchant', authenticated: boolean, joinedAt: number }
   }
 
   isMerchantOnline() {

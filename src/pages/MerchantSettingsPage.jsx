@@ -233,11 +233,11 @@ export default function MerchantSettingsPage() {
                   label="Shop Code (Customer Lookup)"
                   value={shopCode || 'Auto-generated on creation'}
                   fullWidth
-                  InputProps={{
+                  inputprops={{
                     readOnly: true,
                     sx: { fontFamily: 'monospace', fontWeight: 'bold', letterSpacing: 1.5 },
                   }}
-                  helperText="Customers can enter this 6-character code on homepage"
+                  helperText="Customers can enter this 4-digit code (e.g. 8421) on homepage"
                 />
               </Grid>
               <Grid item xs={12} sm={6}>
@@ -254,7 +254,7 @@ export default function MerchantSettingsPage() {
                   value={formData.phone}
                   onChange={handleChange('phone')}
                   fullWidth
-                  InputProps={{
+                  inputprops={{
                     startAdornment: <InputAdornment position="start">+91</InputAdornment>,
                   }}
                 />
@@ -313,7 +313,7 @@ export default function MerchantSettingsPage() {
                   value={formData.pricePerPageBW}
                   onChange={handleChange('pricePerPageBW')}
                   fullWidth
-                  InputProps={{
+                  inputprops={{
                     startAdornment: <InputAdornment position="start">₹</InputAdornment>,
                   }}
                 />
@@ -325,7 +325,7 @@ export default function MerchantSettingsPage() {
                   value={formData.pricePerPageColor}
                   onChange={handleChange('pricePerPageColor')}
                   fullWidth
-                  InputProps={{
+                  inputprops={{
                     startAdornment: <InputAdornment position="start">₹</InputAdornment>,
                   }}
                 />
@@ -389,10 +389,10 @@ export default function MerchantSettingsPage() {
               Scan to print instantly
             </Typography>
 
-            {/* 6-Character Shop Code Display */}
+            {/* 4-Digit Station Code Display */}
             <Box sx={{ my: 1.5, p: 1.5, bgcolor: '#f0f4f8', borderRadius: 2, border: '1px dashed #90caf9' }}>
               <Typography variant="caption" color="text.secondary" display="block">
-                6-Character Shop Code
+                4-Digit Station Code (QP-XXXX)
               </Typography>
               <Typography
                 variant="h4"

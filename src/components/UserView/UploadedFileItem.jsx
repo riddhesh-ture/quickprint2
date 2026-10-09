@@ -219,7 +219,7 @@ export default function UploadedFileItem({ fileEntry, onSpecChange, onRemove }) 
                 value={specs.copies === '' ? '' : (specs.copies || 1)}
                 onChange={handleCopiesChange}
                 onBlur={handleCopiesBlur}
-                inputProps={{ min: 1, max: 100 }}
+                inputprops={{ min: 1, max: 100 }}
                 fullWidth
               />
             </Box>

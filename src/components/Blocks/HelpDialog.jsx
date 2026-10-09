@@ -32,7 +32,7 @@ export default function HelpDialog({ open, onClose }) {
       num: 1,
       icon: <QrCodeScannerIcon sx={{ color: '#2563eb' }} />,
       title: 'Pair With Print Station',
-      desc: 'Scan the QR code displayed at the shop counter, or manually enter the 6-character shop code (e.g., QP-8421).',
+      desc: 'Scan the QR code displayed at the shop counter, or manually enter the 4-digit station code (e.g., 8421 or QP-8421).',
     },
     {
       num: 2,
