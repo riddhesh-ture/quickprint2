@@ -1,7 +1,7 @@
 // src/pages/PaymentSelectionPage.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
-import { Container, Box, Typography, Stack, Paper, Divider, Button, Tooltip } from '@mui/material';
+import { Container, Box, Typography, Stack, Paper, Divider, Button } from '@mui/material';
 import RawCheckCircleIcon from '@mui/icons-material/CheckCircle';
 import RawRadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
 import RawPaymentsIcon from '@mui/icons-material/Payments';
@@ -108,8 +108,11 @@ export default function PaymentSelectionPage() {
         userAvatar: identity.avatar,
         fileName: primaryFileName,
         pages: totalPages,
+        rawPages: incoming.rawPagesCount || totalPages,
+        duplex: Boolean(incoming.duplex),
         amount: totalCost,
         paymentMethod: selectedMethod,
+        status: selectedMethod === 'upi' ? 'paymentClaimed' : 'pending',
         formattedDate: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       };
 
@@ -151,7 +154,7 @@ export default function PaymentSelectionPage() {
         <PrintCard title="Order Summary" subtitle={primaryFileName}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
             <Typography variant="body2" sx={{ color: colors.textSecondary }}>
-              Printing ({totalPages} pages {colorPages > 0 ? `• ${colorPages} Color` : '• B&W'})
+              Printing ({totalPages} {totalPages === 1 ? (incoming.duplex ? 'sheet' : 'page') : (incoming.duplex ? 'sheets' : 'pages')}{incoming.duplex ? ` (${incoming.rawPagesCount || totalPages * 2} pgs • Duplex)` : ''} {colorPages > 0 ? `• ${colorPages} Color` : `• ${bwPages} B&W`})
             </Typography>
             <Typography variant="body2" sx={{ fontWeight: 700, color: colors.text }}>
               ₹{totalCost}

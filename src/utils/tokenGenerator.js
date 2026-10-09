@@ -3,7 +3,7 @@
  * QuickPrint Token & Identification Generator
  *
  * Distinct formats:
- * - Order Token: #<token>-<pin> (e.g. #14-8421) + optional phone suffix (📞 <last4>)
+ * - Order Token: #<token>-<pin> (e.g. #14-8421) + optional phone suffix
  * - Merchant Shop Code: QP-XXXX (e.g. QP-8421)
  */
 
@@ -38,18 +38,19 @@ export function generateDailyTokenNumber() {
     }
 
     const payload = JSON.stringify({ date: today, counter });
-    try { sessionStorage.setItem(TOKEN_STORAGE_KEY, payload); } catch {}
-    try { localStorage.setItem(TOKEN_STORAGE_KEY, payload); } catch {}
+    try { sessionStorage.setItem(TOKEN_STORAGE_KEY, payload); } catch (e) { void e; }
+    try { localStorage.setItem(TOKEN_STORAGE_KEY, payload); } catch (e) { void e; }
 
     return counter;
-  } catch {
+  } catch (err) {
+    void err;
     return Math.floor(1 + Math.random() * 99);
   }
 }
 
 /**
  * Format standard Order Token string:
- * e.g. formatOrderToken(14, '8421', '9876543210') => '#14-8421 (📞 3210)'
+ * e.g. formatOrderToken(14, '8421', '9876543210') => '#14-8421'
  *      formatOrderToken(14, '8421') => '#14-8421'
  */
 export function formatOrderToken(tokenNumber, pin, phone = null) {
@@ -60,7 +61,7 @@ export function formatOrderToken(tokenNumber, pin, phone = null) {
   if (phone) {
     const digits = String(phone).replace(/\D/g, '');
     if (digits.length >= 4) {
-      base += ` (📞 ${digits.slice(-4)})`;
+      base += ` ( ${digits.slice(-4)})`;
     }
   }
 
@@ -75,8 +76,8 @@ export function parseOrderToken(tokenString) {
     return { tokenNumber: null, pin: null, phoneSuffix: null };
   }
 
-  // Regex matches: #<digits>-<pin> and optional (📞 <digits>)
-  const match = tokenString.match(/#?(\d+)-(\d{4})(?:\s*\(📞\s*(\d{4})\))?/);
+  // Regex matches: #<digits>-<pin> and optional ( <digits>)
+  const match = tokenString.match(/#?(\d+)-(\d{4})(?:\s*\(\s*(\d{4})\))?/);
   if (match) {
     return {
       tokenNumber: match[1],
@@ -95,12 +96,29 @@ export function parseOrderToken(tokenString) {
 }
 
 /**
- * Standardize Merchant Shop Code: QP-XXXX
+ * Standardize Merchant Shop Code: QP-XXXX (4-digit format)
  */
 export function formatShopCode(input) {
   if (!input) return 'QP-8421';
-  const cleaned = String(input).trim().toUpperCase();
+  const cleaned = String(input).replace(/\s+/g, '').toUpperCase();
   if (cleaned.startsWith('QP-')) return cleaned;
   if (cleaned.startsWith('QP')) return `QP-${cleaned.slice(2)}`;
   return `QP-${cleaned}`;
+}
+
+/**
+ * Extract the raw 4-digit numeric code from a shop code string
+ */
+export function extractShopCodeDigits(input) {
+  if (!input) return '8421';
+  const digits = String(input).replace(/\D/g, '');
+  return digits.slice(-4) || '8421';
+}
+
+/**
+ * Generate a randomized 4-digit Merchant Shop Code (QP-XXXX format, e.g. QP-8421)
+ */
+export function generateShopCode() {
+  const digits = Math.floor(1000 + Math.random() * 9000);
+  return `QP-${digits}`;
 }

@@ -57,13 +57,15 @@ export default function OrderReceiptPendingPage() {
     tokenNumber: passedOrder.tokenNumber || '#14-8421',
     fileName: passedOrder.fileName || DEFAULT_DEMO_ORDER.fileName,
     pages: passedOrder.pages || DEFAULT_DEMO_ORDER.pages,
+    rawPages: passedOrder.rawPages || passedOrder.pages || DEFAULT_DEMO_ORDER.pages,
+    duplex: Boolean(passedOrder.duplex),
     amount: String(passedOrder.amount || DEFAULT_DEMO_ORDER.amount),
   };
 
   const jobId = order.jobId || order.orderId;
 
   // Realtime Status State: 'pending' | 'printing' | 'completed' | 'paid'
-  const [status, setStatus] = useState('pending');
+  const [status, setStatus] = useState(passedOrder?.status || (passedOrder?.paymentMethod === 'upi' ? 'paymentClaimed' : 'pending'));
   const [copied, setCopied] = useState(false);
   const [privacyOpen, setPrivacyOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
@@ -301,8 +303,14 @@ export default function OrderReceiptPendingPage() {
             </Typography>
           </Box>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-            <Typography variant="body2" sx={{ color: colors.textSecondary }}>Total Pages</Typography>
-            <Typography variant="body2" sx={{ fontWeight: 700, color: colors.text }}>{order.pages} Pages</Typography>
+            <Typography variant="body2" sx={{ color: colors.textSecondary }}>
+              {order.duplex ? 'Total Sheets' : 'Total Pages'}
+            </Typography>
+            <Typography variant="body2" sx={{ fontWeight: 700, color: colors.text }}>
+              {order.duplex
+                ? `${order.pages} ${order.pages === 1 ? 'Sheet' : 'Sheets'} (${order.rawPages} pgs • Duplex)`
+                : `${order.pages} ${order.pages === 1 ? 'Page' : 'Pages'}`}
+            </Typography>
           </Box>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
             <Typography variant="body2" sx={{ color: colors.textSecondary }}>Payment Method</Typography>

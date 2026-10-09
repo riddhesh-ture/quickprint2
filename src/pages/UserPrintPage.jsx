@@ -127,18 +127,28 @@ export default function UserPrintPage() {
   const hasFileErrors = useMemo(() => files.some((f) => Boolean(f.error)), [files]);
   const isAnyFileAnalyzing = useMemo(() => files.some((f) => Boolean(f.isAnalyzing)), [files]);
 
-  const { totalPagesCount, estimatedCost } = useMemo(() => {
-    const pages = files.reduce((acc, f) => {
+  const { totalPagesCount, estimatedCost, rawPagesCount } = useMemo(() => {
+    let rawTotal = 0;
+    let billableTotal = 0;
+
+    files.forEach((f) => {
       const docPages = f.specs?.pageCount || 1;
       const billable = f.specs?.pages && f.specs.pages !== 'all'
-        ? calculateBillablePages(docPages, f.specs.pages)
+        ? calculateBillablePages(docPages, f.specs.pages, false)
         : docPages;
-      return acc + billable;
-    }, 0);
+      rawTotal += billable;
+      const sheets = duplex ? Math.ceil(billable / 2) : billable;
+      billableTotal += sheets;
+    });
+
     const rate = colorMode === 'color' ? priceColor : priceBW;
-    const cost = pages * rate * copies;
-    return { totalPagesCount: pages, estimatedCost: cost.toFixed(2) };
-  }, [files, colorMode, copies, priceBW, priceColor]);
+    const cost = billableTotal * rate * copies;
+    return {
+      rawPagesCount: rawTotal,
+      totalPagesCount: billableTotal,
+      estimatedCost: cost.toFixed(2),
+    };
+  }, [files, colorMode, duplex, copies, priceBW, priceColor]);
 
   // Submission Flow (Direct Transfer + DB metadata)
   const handlePrintSubmission = async () => {
@@ -170,7 +180,7 @@ export default function UserPrintPage() {
         size: f.file?.size || 0,
         type: f.file?.type || 'application/pdf',
         pageCount: f.specs?.pageCount || 1,
-        specs: { ...f.specs, color: colorMode, copies, duplex },
+        specs: { ...f.specs, color: colorMode, copies, duplex, sides: duplex ? 'double' : 'single' },
       }));
 
       // Mode 1: stream real files if available
@@ -216,6 +226,7 @@ export default function UserPrintPage() {
           merchantProfile,
           files: filesForJob,
           totalPagesCount,
+          rawPagesCount,
           bwPagesCount: colorMode === 'bw' ? totalPagesCount : 0,
           colorPagesCount: colorMode === 'color' ? totalPagesCount : 0,
           estimatedCost,
@@ -337,7 +348,7 @@ export default function UserPrintPage() {
       {/* Sticky Bottom Dock */}
       <StickyActionDock
         priceText={`₹${estimatedCost}`}
-        badge={`${totalPagesCount} ${totalPagesCount === 1 ? 'Page' : 'Pages'}`}
+        badge={`${totalPagesCount} ${totalPagesCount === 1 ? (duplex ? 'Sheet' : 'Page') : (duplex ? 'Sheets' : 'Pages')}`}
         primaryLabel={isSubmitting ? 'Sending...' : isAnyFileAnalyzing ? 'Checking Pages...' : 'Proceed to Payment'}
         onPrimaryClick={handlePrintSubmission}
         disabled={files.length === 0 || isSubmitting || hasFileErrors || isAnyFileAnalyzing}

@@ -58,7 +58,7 @@ export default function AppFooter({
                 '&:hover': { color: colors.primary, bgcolor: 'transparent' },
               }}
             >
-              Zero-Retention Privacy
+              Zero-Retention Policy
             </Button>
           )}
 

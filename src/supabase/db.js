@@ -211,25 +211,37 @@ export const getMerchantByShopCodeOrId = async (codeOrId) => {
     return null;
   }
 
-  // 1. Check in-memory LRU cache first (by ID or by shopCode)
+  // 1. Generate standard code variants (4-digit format support: QP-8421, 8421, QP8421)
+  const upperCode = trimmed.toUpperCase();
+  const qpFormatted = upperCode.startsWith('QP-')
+    ? upperCode
+    : (upperCode.startsWith('QP') ? `QP-${upperCode.slice(2)}` : `QP-${upperCode}`);
+  const unhyphenated = qpFormatted.replace('-', '');
+  const rawDigits = trimmed.replace(/\D/g, '');
+  const candidateCodes = new Set([upperCode, qpFormatted, unhyphenated, rawDigits].filter(Boolean));
+
+  // 1. Check in-memory LRU cache first (by ID or by any matching shopCode variant)
   for (const [, entry] of profileCache.entries()) {
     if (Date.now() - entry.timestamp < 60000 && entry.data) {
+      const entryCode = entry.data.shopCode ? entry.data.shopCode.toUpperCase() : null;
       if (
         entry.data.id === trimmed ||
-        (entry.data.shopCode && entry.data.shopCode.toUpperCase() === trimmed.toUpperCase())
+        (entryCode && candidateCodes.has(entryCode))
       ) {
         return entry.data;
       }
     }
   }
 
-  // 2. Query Supabase: Single-pass PostgREST .or() query combining shop_code and id
-  const upperCode = trimmed.toUpperCase();
+  // 2. Query Supabase: Single-pass PostgREST .or() query combining all shop_code variants and id
   try {
+    const codeFilters = Array.from(candidateCodes).map((c) => `shop_code.eq.${c}`);
+    const orQuery = [...codeFilters, `id.eq.${trimmed}`].join(',');
+
     const { data, error } = await supabase
       .from('merchants')
       .select('*')
-      .or(`shop_code.eq.${upperCode},id.eq.${trimmed}`)
+      .or(orQuery)
       .limit(1)
       .maybeSingle();
 

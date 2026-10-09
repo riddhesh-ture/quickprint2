@@ -1,27 +1,24 @@
-// src/pages/HomePage.jsx
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Container,
   Box,
   Typography,
   TextField,
+  InputAdornment,
   Button,
   Stack,
   IconButton,
   CircularProgress,
-  Dialog,
-  DialogTitle,
-  DialogContent,
 } from '@mui/material';
 import RawQrCodeScannerIcon from '@mui/icons-material/QrCodeScanner';
 import RawArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import RawStorefrontIcon from '@mui/icons-material/Storefront';
-import RawCloseIcon from '@mui/icons-material/Close';
 import RawDeleteOutlineIcon from '@mui/icons-material/DeleteOutlined';
 import RawHistoryIcon from '@mui/icons-material/History';
 import { unwrapIcon } from '../utils/iconHelper';
 import { useThemeMode } from '../context/ThemeContext';
+import QrCodeScannerModal from '../components/UserView/QrCodeScannerModal';
 import {
   AppHeader,
   PrintCard,
@@ -35,7 +32,6 @@ import { getSavedShops, removeSavedShop, recordShopVisit } from '../utils/recent
 const QrCodeScannerIcon = unwrapIcon(RawQrCodeScannerIcon);
 const ArrowForwardIcon = unwrapIcon(RawArrowForwardIcon);
 const StorefrontIcon = unwrapIcon(RawStorefrontIcon);
-const CloseIcon = unwrapIcon(RawCloseIcon);
 const DeleteOutlineIcon = unwrapIcon(RawDeleteOutlineIcon);
 const HistoryIcon = unwrapIcon(RawHistoryIcon);
 
@@ -59,8 +55,6 @@ export default function HomePage() {
   const [privacyOpen, setPrivacyOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
 
-  const scannerRef = useRef(null);
-
   useEffect(() => {
     setSavedShops(getSavedShops());
   }, []);
@@ -78,29 +72,59 @@ export default function HomePage() {
   };
 
   const handleResolveCode = async (rawCode) => {
-    const trimmed = (rawCode || inputCode).trim().toUpperCase();
-    if (!trimmed) return;
+    let raw = (rawCode || inputCode).trim();
+    if (!raw) return;
+
+    // Check if raw is a URL (e.g. from scanned QR code)
+    if (raw.includes('http://') || raw.includes('https://') || raw.includes('/print?') || raw.includes('?')) {
+      try {
+        const url = new URL(raw, window.location.origin);
+        let searchParams = url.searchParams;
+        if (url.hash && url.hash.includes('?')) {
+          const hashQuery = url.hash.split('?')[1];
+          searchParams = new URLSearchParams(hashQuery);
+        }
+        const urlMerchantId = searchParams.get('merchantId') || searchParams.get('id');
+        const urlCode = searchParams.get('code') || searchParams.get('shop') || searchParams.get('shopCode');
+        if (urlMerchantId) {
+          raw = urlMerchantId;
+        } else if (urlCode) {
+          raw = urlCode;
+        } else if (url.pathname) {
+          const pathEnd = url.pathname.split('/').filter(Boolean).pop();
+          if (pathEnd && (/^\d{4}$/.test(pathEnd) || /^QP-/i.test(pathEnd))) {
+            raw = pathEnd;
+          }
+        }
+      } catch {
+        // Fallback to text parsing
+      }
+    }
+
+    const trimmed = raw.trim().toUpperCase();
     setCodeLoading(true);
     setCodeError(null);
 
     try {
       const { getMerchantByShopCodeOrId } = await import('../supabase/db');
       const clean = trimmed.replace(/\s+/g, '');
+
+      // Check if it's the demo station
+      if (clean === 'QP-8421' || clean === 'QP8421' || clean === '8421' || clean === 'CAMPUS-LIBRARY-04') {
+        handleSelectShop(DEFAULT_DEMO_SHOP);
+        return;
+      }
+
       let merchant = await getMerchantByShopCodeOrId(clean);
 
-      if (!merchant && clean.includes('-')) {
-        merchant = await getMerchantByShopCodeOrId(clean.replace(/-/g, ''));
-      }
-      if (!merchant && !clean.includes('-') && clean.length === 6) {
-        merchant = await getMerchantByShopCodeOrId(`${clean.slice(0, 2)}-${clean.slice(2)}`);
+      if (!merchant && !clean.startsWith('QP-') && /^\d{4}$/.test(clean)) {
+        merchant = await getMerchantByShopCodeOrId(`QP-${clean}`);
       }
 
       if (merchant?.id) {
         handleSelectShop(merchant);
-      } else if (clean === 'QP-8421' || clean === 'QP8421' || clean === '8421') {
-        handleSelectShop(DEFAULT_DEMO_SHOP);
       } else {
-        setCodeError('Shop code not found. Please verify the 6-character code.');
+        setCodeError('Shop code not found. Please verify the 4-digit code.');
       }
     } catch {
       if (trimmed.includes('8421') || trimmed.includes('DEMO')) {
@@ -129,7 +153,7 @@ export default function HomePage() {
         {/* 1. Hero Hub Card: Enter Shop Code or Scan QR */}
         <PrintCard
           title="Print Instantly"
-          subtitle="Enter 6-character shop code or scan counter QR"
+          subtitle="Enter 4-digit code (e.g. 8421) or scan counter QR"
           elevation
           sx={{ textAlign: 'center' }}
         >
@@ -137,13 +161,33 @@ export default function HomePage() {
             <TextField
               fullWidth
               value={inputCode}
-              onChange={(e) => setInputCode(e.target.value.toUpperCase())}
-              placeholder="e.g. QP-8421"
+              onChange={(e) => {
+                const rawVal = e.target.value;
+                if (rawVal.includes('http://') || rawVal.includes('https://') || rawVal.includes('?')) {
+                  handleResolveCode(rawVal);
+                  return;
+                }
+                let val = rawVal.toUpperCase();
+                if (val.startsWith('QP-')) val = val.slice(3);
+                else if (val.startsWith('QP')) val = val.slice(2);
+                const cleaned = val.replace(/[^A-Z0-9]/g, '').slice(0, 4);
+                setInputCode(cleaned);
+              }}
+              placeholder="8421"
               error={Boolean(codeError)}
               helperText={codeError}
-              inputProps={{
-                maxLength: 10,
-                style: { textAlign: 'center', fontSize: '1.25rem', fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase' },
+              inputprops={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <Typography sx={{ fontWeight: 800, color: colors.primary, fontSize: '1.25rem', letterSpacing: '0.05em' }}>
+                      QP-
+                    </Typography>
+                  </InputAdornment>
+                ),
+              }}
+              inputprops={{
+                maxLength: 4,
+                style: { textAlign: 'left', fontSize: '1.25rem', fontWeight: 800, letterSpacing: '0.12em' },
               }}
               sx={{ mb: 1.5 }}
             />
@@ -236,25 +280,19 @@ export default function HomePage() {
         <TrustBanner onLearnMore={() => setPrivacyOpen(true)} />
       </Container>
 
-      {/* QR Scanner Dialog */}
-      <Dialog open={scannerOpen} onClose={() => setScannerOpen(false)} maxWidth="xs" fullWidth>
-        <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Typography variant="h6" sx={{ fontWeight: 700 }}>Scan Station QR</Typography>
-          <IconButton onClick={() => setScannerOpen(false)}><CloseIcon sx={{ fontSize: 18 }} /></IconButton>
-        </DialogTitle>
-        <DialogContent sx={{ textAlign: 'center', pb: 3 }}>
-          <Typography variant="body2" sx={{ color: colors.textSecondary, mb: 2 }}>
-            Point your camera at the QuickPrint QR code at the counter
-          </Typography>
-          <Button
-            variant="contained"
-            onClick={() => { setScannerOpen(false); handleSelectShop(DEFAULT_DEMO_SHOP); }}
-            sx={{ textTransform: 'none', fontWeight: 700 }}
-          >
-            Simulate Counter QR Scan
-          </Button>
-        </DialogContent>
-      </Dialog>
+      {/* Real Camera QR Scanner Modal with Fallback */}
+      <QrCodeScannerModal
+        open={scannerOpen}
+        onClose={() => setScannerOpen(false)}
+        onScanSuccess={(decodedText) => {
+          setScannerOpen(false);
+          handleResolveCode(decodedText);
+        }}
+        onSimulateScan={() => {
+          setScannerOpen(false);
+          handleSelectShop(DEFAULT_DEMO_SHOP);
+        }}
+      />
 
       <PrivacyDialog open={privacyOpen} onClose={() => setPrivacyOpen(false)} />
       <HelpDialog open={helpOpen} onClose={() => setHelpOpen(false)} />

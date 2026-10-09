@@ -8,6 +8,7 @@ import RawWaterDropIcon from '@mui/icons-material/WaterDrop';
 import RawContentCopyIcon from '@mui/icons-material/ContentCopy';
 import { unwrapIcon } from '../../utils/iconHelper';
 import { useThemeMode } from '../../context/ThemeContext';
+import { calculateBillablePages } from '../../utils/fileValidation';
 
 const DescriptionIcon = unwrapIcon(RawDescriptionIcon);
 const DeleteOutlineIcon = unwrapIcon(RawDeleteOutlineIcon);
@@ -36,6 +37,11 @@ export default function DocumentCard({
   action,
 }) {
   const { isDark, colors } = useThemeMode();
+
+  const selectedPages = pageRange && pageRange !== 'all'
+    ? calculateBillablePages(pageCount, pageRange, false)
+    : (pageCount || 1);
+  const billableSheets = duplex ? Math.max(1, Math.ceil(selectedPages / 2)) : selectedPages;
 
   return (
     <Box
@@ -180,8 +186,8 @@ export default function DocumentCard({
             <AutoStoriesIcon sx={{ fontSize: 13, color: colors.primary }} />
             <span>
               {pageRange && pageRange !== 'all'
-                ? `Pages: ${pageRange} (${pageCount} total)`
-                : `${pageCount} ${pageCount === 1 ? 'Page' : 'Pages'}`}
+                ? `Pages: ${pageRange} (${selectedPages} pgs${duplex ? ` • ${billableSheets} ${billableSheets === 1 ? 'sheet' : 'sheets'}` : ''})`
+                : `${selectedPages} ${selectedPages === 1 ? 'Page' : 'Pages'}${duplex ? ` (${billableSheets} ${billableSheets === 1 ? 'sheet' : 'sheets'})` : ''}`}
             </span>
           </Box>
         )}
@@ -202,7 +208,7 @@ export default function DocumentCard({
           }}
         >
           <WaterDropIcon sx={{ fontSize: 13, color: colorMode === 'color' ? '#2563eb' : colors.textSecondary }} />
-          <span>{colorMode === 'color' ? 'Color' : 'B&W'} {duplex ? '(Double)' : '(Single)'}</span>
+          <span>{colorMode === 'color' ? 'Color' : 'B&W'} • {duplex ? 'Double-Sided' : 'Single-Sided'}</span>
         </Box>
 
         <Box
