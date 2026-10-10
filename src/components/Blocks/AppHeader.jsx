@@ -2,19 +2,12 @@
 import React from 'react';
 import { Box, Typography, IconButton, Tooltip } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
-import RawArrowBackIcon from '@mui/icons-material/ArrowBack';
-import RawPrintIcon from '@mui/icons-material/Print';
-import RawDarkModeOutlinedIcon from '@mui/icons-material/DarkModeOutlined';
-import RawLightModeOutlinedIcon from '@mui/icons-material/LightModeOutlined';
-import RawStorefrontIcon from '@mui/icons-material/Storefront';
-import { unwrapIcon } from '../../utils/iconHelper';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import PrintIcon from '@mui/icons-material/Print';
+import DarkModeOutlinedIcon from '@mui/icons-material/DarkModeOutlined';
+import LightModeOutlinedIcon from '@mui/icons-material/LightModeOutlined';
+import StorefrontIcon from '@mui/icons-material/Storefront';
 import { useThemeMode } from '../../context/ThemeContext';
-
-const ArrowBackIcon = unwrapIcon(RawArrowBackIcon);
-const PrintIcon = unwrapIcon(RawPrintIcon);
-const DarkModeOutlinedIcon = unwrapIcon(RawDarkModeOutlinedIcon);
-const LightModeOutlinedIcon = unwrapIcon(RawLightModeOutlinedIcon);
-const StorefrontIcon = unwrapIcon(RawStorefrontIcon);
 
 export default function AppHeader({
   title = 'QuickPrint',

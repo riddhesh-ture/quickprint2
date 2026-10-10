@@ -1,14 +1,10 @@
 // src/components/Blocks/ShopIdentityHeader.jsx
 import React from 'react';
 import { Box, Typography } from '@mui/material';
-import RawStorefrontIcon from '@mui/icons-material/Storefront';
-import RawNumbersIcon from '@mui/icons-material/Numbers';
-import { unwrapIcon } from '../../utils/iconHelper';
+import StorefrontIcon from '@mui/icons-material/Storefront';
+import NumbersIcon from '@mui/icons-material/Numbers';
 import { useThemeMode } from '../../context/ThemeContext';
 import { formatShopCode } from '../../utils/tokenGenerator';
-
-const StorefrontIcon = unwrapIcon(RawStorefrontIcon);
-const NumbersIcon = unwrapIcon(RawNumbersIcon);
 
 export default function ShopIdentityHeader({
   shopName = 'QuickPrint Station',

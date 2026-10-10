@@ -2,27 +2,20 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Container, Box, Typography, Stack, IconButton, Alert } from '@mui/material';
-import RawAddIcon from '@mui/icons-material/Add';
-import RawRemoveIcon from '@mui/icons-material/Remove';
-import { unwrapIcon } from '../utils/iconHelper';
+import AddIcon from '@mui/icons-material/Add';
+import RemoveIcon from '@mui/icons-material/Remove';
 import { useThemeMode } from '../context/ThemeContext';
-import {
-  AppHeader,
-  ShopIdentityHeader,
-  PrintCard,
-  DocumentCard,
-  SegmentedChoice,
-  TrustBanner,
-  StickyActionDock,
-} from '../components/Blocks';
+import AppHeader from '../components/Blocks/AppHeader';
+import ShopIdentityHeader from '../components/Blocks/ShopIdentityHeader';
+import PrintCard from '../components/Blocks/PrintCard';
+import DocumentCard from '../components/Blocks/DocumentCard';
+import SegmentedChoice from '../components/Blocks/SegmentedChoice';
+import TrustBanner from '../components/Blocks/TrustBanner';
+import StickyActionDock from '../components/Blocks/StickyActionDock';
 import FileUploader from '../components/UserView/FileUploader';
 import { getMerchantProfile, generatePrintJobId, createPrintJobWithId } from '../supabase/db';
-import { getOrCreateUserIdentity } from '../utils/nameGenerator';
 import { realtimeRelay } from '../utils/realtimeRelay';
 import { inspectPdfFile, calculateBillablePages } from '../utils/fileValidation';
-
-const AddIcon = unwrapIcon(RawAddIcon);
-const RemoveIcon = unwrapIcon(RawRemoveIcon);
 
 const DEFAULT_DEMO_MERCHANT = {
   id: 'campus-library-04',
@@ -171,7 +164,6 @@ export default function UserPrintPage() {
     setSubmitError(null);
 
     try {
-      const identity = getOrCreateUserIdentity() || { name: 'Student Guest', avatar: '🎓' };
       const newJobId = generatePrintJobId();
       const hasRealFiles = files.some((f) => !f.isDemo);
 
@@ -200,8 +192,8 @@ export default function UserPrintPage() {
       const jobData = {
         merchantId,
         merchantName: merchantProfile.shopName,
-        customerName: identity.name,
-        customerAvatar: identity.avatar,
+        customerName: 'Customer',
+        customerAvatar: '📄',
         files: filesForJob,
         status: 'pending',
         cost: Number(estimatedCost),

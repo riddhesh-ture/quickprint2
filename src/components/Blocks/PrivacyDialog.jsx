@@ -10,19 +10,12 @@ import {
   Box,
   IconButton,
 } from '@mui/material';
-import RawCloseIcon from '@mui/icons-material/Close';
-import RawShieldOutlinedIcon from '@mui/icons-material/ShieldOutlined';
-import RawBoltIcon from '@mui/icons-material/Bolt';
-import RawDeleteSweepIcon from '@mui/icons-material/DeleteSweep';
-import RawNoAccountsIcon from '@mui/icons-material/NoAccounts';
-import { unwrapIcon } from '../../utils/iconHelper';
+import CloseIcon from '@mui/icons-material/Close';
+import ShieldOutlinedIcon from '@mui/icons-material/ShieldOutlined';
+import BoltIcon from '@mui/icons-material/Bolt';
+import DeleteSweepIcon from '@mui/icons-material/DeleteSweep';
+import NoAccountsIcon from '@mui/icons-material/NoAccounts';
 import { useThemeMode } from '../../context/ThemeContext';
-
-const CloseIcon = unwrapIcon(RawCloseIcon);
-const ShieldOutlinedIcon = unwrapIcon(RawShieldOutlinedIcon);
-const BoltIcon = unwrapIcon(RawBoltIcon);
-const DeleteSweepIcon = unwrapIcon(RawDeleteSweepIcon);
-const NoAccountsIcon = unwrapIcon(RawNoAccountsIcon);
 
 export default function PrivacyDialog({ open, onClose }) {
   const { isDark, colors } = useThemeMode();

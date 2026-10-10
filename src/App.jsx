@@ -3,8 +3,6 @@ import React, { Suspense, lazy } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { Box, CircularProgress } from '@mui/material';
 import { ThemeContextProvider } from './context/ThemeContext';
-import ErrorBoundary from './components/ErrorBoundary';
-
 // Lazy-loaded Pages for code-splitting
 const HomePage = lazy(() => import('./pages/HomePage'));
 const UserPrintPage = lazy(() => import('./pages/UserPrintPage'));
@@ -17,9 +15,9 @@ const MerchantDashboardPage = lazy(() => import('./pages/MerchantDashboardPage')
 const MerchantAnalyticsPage = lazy(() => import('./pages/MerchantAnalyticsPage'));
 const MerchantSettingsPage = lazy(() => import('./pages/MerchantSettingsPage'));
 
-// Merchant Auth Wrapper & Protected Route (Lazy-loaded to isolate Firebase from public entry)
-const MerchantAuthWrapper = lazy(() => import('./components/MerchantAuthWrapper'));
-const MerchantProtectedRoute = lazy(() => import('./components/MerchantAuthWrapper').then(m => ({ default: m.MerchantProtectedRoute })));
+// Merchant Auth Wrapper & Protected Route (Lazy-loaded from AuthContext to keep public entry lightweight)
+const MerchantAuthWrapper = lazy(() => import('./context/AuthContext').then(m => ({ default: m.MerchantAuthWrapper })));
+const MerchantProtectedRoute = lazy(() => import('./context/AuthContext').then(m => ({ default: m.MerchantProtectedRoute })));
 
 // Layout
 const MerchantLayout = lazy(() => import('./components/Layout/MerchantLayout'));
@@ -33,8 +31,7 @@ const RouteLoader = () => (
 export default function App() {
   return (
     <ThemeContextProvider>
-      <ErrorBoundary>
-        <Suspense fallback={<RouteLoader />}>
+      <Suspense fallback={<RouteLoader />}>
         <Routes>
           {/* Public Routes - Zero Firebase / Zero Blocking Spinners */}
           <Route path="/" element={<HomePage />} />
@@ -60,7 +57,6 @@ export default function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Suspense>
-      </ErrorBoundary>
     </ThemeContextProvider>
   );
 }

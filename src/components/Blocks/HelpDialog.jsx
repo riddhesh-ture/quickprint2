@@ -10,19 +10,12 @@ import {
   Box,
   IconButton,
 } from '@mui/material';
-import RawCloseIcon from '@mui/icons-material/Close';
-import RawHelpOutlineIcon from '@mui/icons-material/HelpOutlined';
-import RawQrCodeScannerIcon from '@mui/icons-material/QrCodeScanner';
-import RawTuneIcon from '@mui/icons-material/Tune';
-import RawCheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutlined';
-import { unwrapIcon } from '../../utils/iconHelper';
+import CloseIcon from '@mui/icons-material/Close';
+import HelpOutlineIcon from '@mui/icons-material/HelpOutlined';
+import QrCodeScannerIcon from '@mui/icons-material/QrCodeScanner';
+import TuneIcon from '@mui/icons-material/Tune';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutlined';
 import { useThemeMode } from '../../context/ThemeContext';
-
-const CloseIcon = unwrapIcon(RawCloseIcon);
-const HelpOutlineIcon = unwrapIcon(RawHelpOutlineIcon);
-const QrCodeScannerIcon = unwrapIcon(RawQrCodeScannerIcon);
-const TuneIcon = unwrapIcon(RawTuneIcon);
-const CheckCircleOutlineIcon = unwrapIcon(RawCheckCircleOutlineIcon);
 
 export default function HelpDialog({ open, onClose }) {
   const { isDark, colors } = useThemeMode();

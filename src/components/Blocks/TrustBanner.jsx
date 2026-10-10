@@ -1,11 +1,8 @@
 // src/components/Blocks/TrustBanner.jsx
 import React from 'react';
 import { Box, Typography, Button } from '@mui/material';
-import RawShieldOutlinedIcon from '@mui/icons-material/ShieldOutlined';
-import { unwrapIcon } from '../../utils/iconHelper';
+import ShieldOutlinedIcon from '@mui/icons-material/ShieldOutlined';
 import { useThemeMode } from '../../context/ThemeContext';
-
-const ShieldOutlinedIcon = unwrapIcon(RawShieldOutlinedIcon);
 
 export default function TrustBanner({
   compact = false,

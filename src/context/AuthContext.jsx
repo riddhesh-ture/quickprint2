@@ -1,9 +1,11 @@
-import React, { createContext, useState, useEffect, useRef } from 'react';
+import React, { createContext, useState, useEffect, useRef, useContext } from 'react';
+import { Navigate, Outlet } from 'react-router-dom';
 import { onIdTokenChanged } from 'firebase/auth';
 import { auth } from '../firebase/config';
 import { getMerchantProfile } from '../supabase/db';
 import { setSupabaseAuthToken, setSupabaseAuthTokenProvider } from '../supabase/client';
-import { Box, CircularProgress } from '@mui/material';
+import { Box, CircularProgress, Alert, Button, Typography } from '@mui/material';
+import WifiOffIcon from '@mui/icons-material/WifiOff';
 
 export const AuthContext = createContext();
 
@@ -135,4 +137,56 @@ export const AuthProvider = ({ children }) => {
       )}
     </AuthContext.Provider>
   );
+};
+
+export const MerchantAuthWrapper = () => (
+  <AuthProvider>
+    <Outlet />
+  </AuthProvider>
+);
+
+export const MerchantProtectedRoute = () => {
+  const context = useContext(AuthContext);
+  const { user, userData, loading, authError, refreshProfile } = context || {};
+  const [retrying, setRetrying] = useState(false);
+
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  if (user && authError && !userData) {
+    const handleRetry = async () => {
+      setRetrying(true);
+      try {
+        if (refreshProfile) await refreshProfile();
+      } finally {
+        setRetrying(false);
+      }
+    };
+
+    return (
+      <Box sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', p: 3, textAlign: 'center' }}>
+        <WifiOffIcon sx={{ fontSize: 56, color: 'text.secondary', mb: 2 }} />
+        <Typography variant="h6" gutterBottom>
+          Unable to Load Merchant Profile
+        </Typography>
+        <Alert severity="error" sx={{ mb: 3, maxWidth: 440 }}>
+          {authError}
+        </Alert>
+        <Button variant="contained" disabled={retrying} onClick={handleRetry}>
+          {retrying ? <CircularProgress size={24} color="inherit" /> : 'Retry Connection'}
+        </Button>
+      </Box>
+    );
+  }
+
+  if (!user || userData?.role !== 'merchant') {
+    return <Navigate to="/merchant/login" replace />;
+  }
+
+  return <Outlet />;
 };

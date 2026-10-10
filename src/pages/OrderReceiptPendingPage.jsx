@@ -2,32 +2,21 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams, useLocation, useNavigate } from 'react-router-dom';
 import { Container, Box, Typography, Button, Divider, Alert, Tooltip } from '@mui/material';
-import RawCheckCircleIcon from '@mui/icons-material/CheckCircle';
-import RawWarningAmberIcon from '@mui/icons-material/WarningAmber';
-import RawPrintIcon from '@mui/icons-material/Print';
-import RawContentCopyIcon from '@mui/icons-material/ContentCopy';
-import RawCheckIcon from '@mui/icons-material/Check';
-import RawStorefrontIcon from '@mui/icons-material/Storefront';
-import RawNumbersIcon from '@mui/icons-material/Numbers';
-import { unwrapIcon } from '../utils/iconHelper';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import WarningAmberIcon from '@mui/icons-material/WarningAmber';
+import PrintIcon from '@mui/icons-material/Print';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import CheckIcon from '@mui/icons-material/Check';
+import StorefrontIcon from '@mui/icons-material/Storefront';
+import NumbersIcon from '@mui/icons-material/Numbers';
 import { useThemeMode } from '../context/ThemeContext';
-import {
-  AppHeader,
-  PrintCard,
-  TrustBanner,
-  AppFooter,
-  PrivacyDialog,
-  HelpDialog,
-} from '../components/Blocks';
+import AppHeader from '../components/Blocks/AppHeader';
+import PrintCard from '../components/Blocks/PrintCard';
+import TrustBanner from '../components/Blocks/TrustBanner';
+import AppFooter from '../components/Blocks/AppFooter';
+import PrivacyDialog from '../components/Blocks/PrivacyDialog';
+import HelpDialog from '../components/Blocks/HelpDialog';
 import { supabase } from '../supabase/client';
-
-const CheckCircleIcon = unwrapIcon(RawCheckCircleIcon);
-const WarningAmberIcon = unwrapIcon(RawWarningAmberIcon);
-const PrintIcon = unwrapIcon(RawPrintIcon);
-const ContentCopyIcon = unwrapIcon(RawContentCopyIcon);
-const CheckIcon = unwrapIcon(RawCheckIcon);
-const StorefrontIcon = unwrapIcon(RawStorefrontIcon);
-const NumbersIcon = unwrapIcon(RawNumbersIcon);
 
 const DEFAULT_DEMO_ORDER = {
   orderId: 'QP-849201',
