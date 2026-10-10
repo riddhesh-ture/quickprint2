@@ -1,11 +1,8 @@
 // src/components/Blocks/StickyActionDock.jsx
 import React from 'react';
 import { Box, Button, Typography, CircularProgress } from '@mui/material';
-import RawArrowForwardIcon from '@mui/icons-material/ArrowForward';
-import { unwrapIcon } from '../../utils/iconHelper';
+import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import { useThemeMode } from '../../context/ThemeContext';
-
-const ArrowForwardIcon = unwrapIcon(RawArrowForwardIcon);
 
 export default function StickyActionDock({
   priceText,

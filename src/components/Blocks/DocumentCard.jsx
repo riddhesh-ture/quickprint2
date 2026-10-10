@@ -1,20 +1,13 @@
 // src/components/Blocks/DocumentCard.jsx
 import React from 'react';
 import { Box, Typography, IconButton, Tooltip } from '@mui/material';
-import RawDescriptionIcon from '@mui/icons-material/Description';
-import RawDeleteOutlineIcon from '@mui/icons-material/DeleteOutlined';
-import RawAutoStoriesIcon from '@mui/icons-material/AutoStories';
-import RawWaterDropIcon from '@mui/icons-material/WaterDrop';
-import RawContentCopyIcon from '@mui/icons-material/ContentCopy';
-import { unwrapIcon } from '../../utils/iconHelper';
+import DescriptionIcon from '@mui/icons-material/Description';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined';
+import AutoStoriesIcon from '@mui/icons-material/AutoStories';
+import WaterDropIcon from '@mui/icons-material/WaterDrop';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import { useThemeMode } from '../../context/ThemeContext';
 import { calculateBillablePages } from '../../utils/fileValidation';
-
-const DescriptionIcon = unwrapIcon(RawDescriptionIcon);
-const DeleteOutlineIcon = unwrapIcon(RawDeleteOutlineIcon);
-const AutoStoriesIcon = unwrapIcon(RawAutoStoriesIcon);
-const WaterDropIcon = unwrapIcon(RawWaterDropIcon);
-const ContentCopyIcon = unwrapIcon(RawContentCopyIcon);
 
 function formatFileSize(bytes) {
   if (!bytes) return '';

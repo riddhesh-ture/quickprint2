@@ -2,32 +2,20 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import { Container, Box, Typography, Stack, Paper, Divider, Button } from '@mui/material';
-import RawCheckCircleIcon from '@mui/icons-material/CheckCircle';
-import RawRadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
-import RawPaymentsIcon from '@mui/icons-material/Payments';
-import RawVerifiedUserIcon from '@mui/icons-material/VerifiedUser';
-import RawContentCopyIcon from '@mui/icons-material/ContentCopy';
-import RawCheckIcon from '@mui/icons-material/Check';
-import RawLaunchIcon from '@mui/icons-material/Launch';
-import { unwrapIcon } from '../utils/iconHelper';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
+import PaymentsIcon from '@mui/icons-material/Payments';
+import VerifiedUserIcon from '@mui/icons-material/VerifiedUser';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import CheckIcon from '@mui/icons-material/Check';
+import LaunchIcon from '@mui/icons-material/Launch';
 import { useThemeMode } from '../context/ThemeContext';
-
-const CheckCircleIcon = unwrapIcon(RawCheckCircleIcon);
-const RadioButtonUncheckedIcon = unwrapIcon(RawRadioButtonUncheckedIcon);
-const PaymentsIcon = unwrapIcon(RawPaymentsIcon);
-const VerifiedUserIcon = unwrapIcon(RawVerifiedUserIcon);
-const ContentCopyIcon = unwrapIcon(RawContentCopyIcon);
-const CheckIcon = unwrapIcon(RawCheckIcon);
-const LaunchIcon = unwrapIcon(RawLaunchIcon);
-import {
-  AppHeader,
-  ShopIdentityHeader,
-  PrintCard,
-  TrustBanner,
-  StickyActionDock,
-} from '../components/Blocks';
+import AppHeader from '../components/Blocks/AppHeader';
+import ShopIdentityHeader from '../components/Blocks/ShopIdentityHeader';
+import PrintCard from '../components/Blocks/PrintCard';
+import TrustBanner from '../components/Blocks/TrustBanner';
+import StickyActionDock from '../components/Blocks/StickyActionDock';
 import { getMerchantProfile, updatePrintJob } from '../supabase/db';
-import { getOrCreateUserIdentity } from '../utils/nameGenerator';
 import { formatOrderToken, generateDailyTokenNumber, generatePin } from '../utils/tokenGenerator';
 
 const DEFAULT_DEMO_MERCHANT = {
@@ -90,7 +78,6 @@ export default function PaymentSelectionPage() {
   const handlePayAndProceed = async () => {
     setIsSubmitting(true);
     try {
-      const identity = getOrCreateUserIdentity() || { name: 'Student Guest', avatar: '🎓' };
       const dailyToken = incoming.dailyToken || generateDailyTokenNumber();
       const pin = incoming.pin || generatePin();
       const tokenDisplay = incoming.tokenNumber || formatOrderToken(dailyToken, pin);
@@ -104,8 +91,8 @@ export default function PaymentSelectionPage() {
         merchantId,
         merchantName: merchantProfile.shopName,
         shopCode: merchantProfile.shopCode,
-        userName: identity.name,
-        userAvatar: identity.avatar,
+        userName: 'Customer',
+        userAvatar: '📄',
         fileName: primaryFileName,
         pages: totalPages,
         rawPages: incoming.rawPagesCount || totalPages,

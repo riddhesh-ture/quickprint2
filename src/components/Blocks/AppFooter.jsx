@@ -2,15 +2,10 @@
 import React from 'react';
 import { Box, Typography, Button, Link } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
-import RawShieldOutlinedIcon from '@mui/icons-material/ShieldOutlined';
-import RawHelpOutlineIcon from '@mui/icons-material/HelpOutlined';
-import RawStorefrontIcon from '@mui/icons-material/Storefront';
-import { unwrapIcon } from '../../utils/iconHelper';
+import ShieldOutlinedIcon from '@mui/icons-material/ShieldOutlined';
+import HelpOutlineIcon from '@mui/icons-material/HelpOutlined';
+import StorefrontIcon from '@mui/icons-material/Storefront';
 import { useThemeMode } from '../../context/ThemeContext';
-
-const ShieldOutlinedIcon = unwrapIcon(RawShieldOutlinedIcon);
-const HelpOutlineIcon = unwrapIcon(RawHelpOutlineIcon);
-const StorefrontIcon = unwrapIcon(RawStorefrontIcon);
 
 export default function AppFooter({
   onOpenPrivacy,

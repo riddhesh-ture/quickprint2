@@ -15,7 +15,7 @@ import {
 } from '@mui/material';
 import { signInMerchant, signInWithGoogleMerchant } from '../firebase/auth';
 import { useAuth } from '../hooks/useAuth';
-import GoogleIcon from '../components/GoogleIcon';
+import GoogleIcon from '@mui/icons-material/Google';
 
 export default function LoginPage() {
   const navigate = useNavigate();

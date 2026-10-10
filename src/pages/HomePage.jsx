@@ -11,29 +11,20 @@ import {
   IconButton,
   CircularProgress,
 } from '@mui/material';
-import RawQrCodeScannerIcon from '@mui/icons-material/QrCodeScanner';
-import RawArrowForwardIcon from '@mui/icons-material/ArrowForward';
-import RawStorefrontIcon from '@mui/icons-material/Storefront';
-import RawDeleteOutlineIcon from '@mui/icons-material/DeleteOutlined';
-import RawHistoryIcon from '@mui/icons-material/History';
-import { unwrapIcon } from '../utils/iconHelper';
+import QrCodeScannerIcon from '@mui/icons-material/QrCodeScanner';
+import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
+import StorefrontIcon from '@mui/icons-material/Storefront';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined';
+import HistoryIcon from '@mui/icons-material/History';
 import { useThemeMode } from '../context/ThemeContext';
 import QrCodeScannerModal from '../components/UserView/QrCodeScannerModal';
-import {
-  AppHeader,
-  PrintCard,
-  TrustBanner,
-  AppFooter,
-  PrivacyDialog,
-  HelpDialog,
-} from '../components/Blocks';
+import AppHeader from '../components/Blocks/AppHeader';
+import PrintCard from '../components/Blocks/PrintCard';
+import TrustBanner from '../components/Blocks/TrustBanner';
+import AppFooter from '../components/Blocks/AppFooter';
+import PrivacyDialog from '../components/Blocks/PrivacyDialog';
+import HelpDialog from '../components/Blocks/HelpDialog';
 import { getSavedShops, removeSavedShop, recordShopVisit } from '../utils/recentShops';
-
-const QrCodeScannerIcon = unwrapIcon(RawQrCodeScannerIcon);
-const ArrowForwardIcon = unwrapIcon(RawArrowForwardIcon);
-const StorefrontIcon = unwrapIcon(RawStorefrontIcon);
-const DeleteOutlineIcon = unwrapIcon(RawDeleteOutlineIcon);
-const HistoryIcon = unwrapIcon(RawHistoryIcon);
 
 const DEFAULT_DEMO_SHOP = {
   id: 'campus-library-04',

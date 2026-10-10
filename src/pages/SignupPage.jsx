@@ -16,7 +16,7 @@ import {
   signOutUser,
 } from '../firebase/auth';
 import { useAuth } from '../hooks/useAuth';
-import GoogleIcon from '../components/GoogleIcon';
+import GoogleIcon from '@mui/icons-material/Google';
 
 const steps = ['Account', 'Shop Details', 'Payment'];
 

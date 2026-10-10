@@ -12,16 +12,11 @@ import {
   Alert,
   Stack,
 } from '@mui/material';
-import RawCloseIcon from '@mui/icons-material/Close';
-import RawCameraAltIcon from '@mui/icons-material/CameraAlt';
-import RawQrCodeScannerIcon from '@mui/icons-material/QrCodeScanner';
-import { unwrapIcon } from '../../utils/iconHelper';
+import CloseIcon from '@mui/icons-material/Close';
+import CameraAltIcon from '@mui/icons-material/CameraAlt';
+import QrCodeScannerIcon from '@mui/icons-material/QrCodeScanner';
 import { useThemeMode } from '../../context/ThemeContext';
 import { Html5Qrcode } from 'html5-qrcode';
-
-const CloseIcon = unwrapIcon(RawCloseIcon);
-const CameraAltIcon = unwrapIcon(RawCameraAltIcon);
-const QrCodeScannerIcon = unwrapIcon(RawQrCodeScannerIcon);
 
 const READER_ELEMENT_ID = 'quickprint-qr-reader';
 

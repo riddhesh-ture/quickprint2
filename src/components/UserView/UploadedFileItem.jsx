@@ -12,25 +12,15 @@ import {
   Tooltip,
   Collapse,
 } from '@mui/material';
-import RawDeleteOutlineIcon from '@mui/icons-material/DeleteOutlined';
-import RawVisibilityIcon from '@mui/icons-material/Visibility';
-import RawPictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
-import RawImageIcon from '@mui/icons-material/Image';
-import RawDescriptionIcon from '@mui/icons-material/Description';
-import RawColorLensIcon from '@mui/icons-material/ColorLens';
-import RawContentCopyIcon from '@mui/icons-material/ContentCopy';
-import RawFlipIcon from '@mui/icons-material/Flip';
-import { unwrapIcon } from '../../utils/iconHelper';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined';
+import VisibilityIcon from '@mui/icons-material/Visibility';
+import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
+import ImageIcon from '@mui/icons-material/Image';
+import DescriptionIcon from '@mui/icons-material/Description';
+import ColorLensIcon from '@mui/icons-material/ColorLens';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import FlipIcon from '@mui/icons-material/Flip';
 import { formatFileSize } from '../../utils/fileValidation';
-
-const DeleteOutlineIcon = unwrapIcon(RawDeleteOutlineIcon);
-const VisibilityIcon = unwrapIcon(RawVisibilityIcon);
-const PictureAsPdfIcon = unwrapIcon(RawPictureAsPdfIcon);
-const ImageIcon = unwrapIcon(RawImageIcon);
-const DescriptionIcon = unwrapIcon(RawDescriptionIcon);
-const ColorLensIcon = unwrapIcon(RawColorLensIcon);
-const ContentCopyIcon = unwrapIcon(RawContentCopyIcon);
-const FlipIcon = unwrapIcon(RawFlipIcon);
 
 const getFileTypeDetails = (fileName) => {
   const ext = fileName.split('.').pop().toLowerCase();

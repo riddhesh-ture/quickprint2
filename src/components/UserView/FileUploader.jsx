@@ -2,14 +2,10 @@
 import React, { useCallback, useState } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { Box, Typography, Paper, Alert } from '@mui/material';
-import RawUploadFileIcon from '@mui/icons-material/UploadFile';
-import RawAddIcon from '@mui/icons-material/Add';
-import { unwrapIcon } from '../../utils/iconHelper';
+import UploadFileIcon from '@mui/icons-material/UploadFile';
+import AddIcon from '@mui/icons-material/Add';
 import { MAX_FILE_SIZE } from '../../utils/fileValidation';
 import { useThemeMode } from '../../context/ThemeContext';
-
-const UploadFileIcon = unwrapIcon(RawUploadFileIcon);
-const AddIcon = unwrapIcon(RawAddIcon);
 
 export default function FileUploader({ onFilesAdded, hasFiles = false }) {
   const [error, setError] = useState(null);
