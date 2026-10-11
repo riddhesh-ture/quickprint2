@@ -77,9 +77,8 @@ export default function JobItem({
   }, [job.createdAt]);
 
   const isRealtime = job.transport === 'realtime';
-  const tokenDisplay = job.tokenNumber || (job.dailyToken ? `#${job.dailyToken}-${job.pin || '8421'}` : `#${job.id.slice(-4)}`);
-  const pinDisplay = job.pin || (job.pickupCode ? job.pickupCode.replace(/^P-/, '') : null);
-  const phoneDisplay = job. || job.userPhone;
+  const pinDisplay = job.pin || (job.tokenNumber ? job.tokenNumber.replace(/\D/g, '').slice(-4) : job.id.slice(-4));
+  const tokenDisplay = `#${pinDisplay}`;
 
   return (
     <ListItem sx={{ flexDirection: 'column', alignItems: 'stretch', borderBottom: '1px solid #eee', py: 1.5 }}>
@@ -88,35 +87,8 @@ export default function JobItem({
           primary={
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
               <Typography variant="subtitle1" fontWeight="bold">
-                 {job.userName || 'Customer'}
+                Order {tokenDisplay}
               </Typography>
-              <Chip
-                size="small"
-                label={tokenDisplay}
-                sx={{
-                  fontWeight: 800,
-                  bgcolor: '#eff6ff',
-                  color: '#2563eb',
-                  border: '1px solid #bfdbfe',
-                  fontFamily: 'monospace',
-                }}
-              />
-              {pinDisplay && (
-                <Chip
-                  size="small"
-                  variant="outlined"
-                  label={`PIN: ${pinDisplay}`}
-                  sx={{ fontWeight: 700, fontFamily: 'monospace' }}
-                />
-              )}
-              {phoneDisplay && (
-                <Chip
-                  size="small"
-                  variant="outlined"
-                  label={` ${phoneDisplay}`}
-                  color="default"
-                />
-              )}
               <Chip
                 size="small"
                 variant="outlined"

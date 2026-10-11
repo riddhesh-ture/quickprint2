@@ -15,8 +15,8 @@ import ShopIdentityHeader from '../components/Blocks/ShopIdentityHeader';
 import PrintCard from '../components/Blocks/PrintCard';
 import TrustBanner from '../components/Blocks/TrustBanner';
 import StickyActionDock from '../components/Blocks/StickyActionDock';
-import { getMerchantProfile, updatePrintJob } from '../supabase/db';
-import { formatOrderToken, generateDailyTokenNumber, generatePin } from '../utils/tokenGenerator';
+import { getMerchantProfile, updatePrintJob, getActiveJobPins } from '../supabase/db';
+import { formatOrderToken, generatePin } from '../utils/tokenGenerator';
 
 const DEFAULT_DEMO_MERCHANT = {
   id: 'campus-library-04',
@@ -78,21 +78,23 @@ export default function PaymentSelectionPage() {
   const handlePayAndProceed = async () => {
     setIsSubmitting(true);
     try {
-      const dailyToken = incoming.dailyToken || generateDailyTokenNumber();
-      const pin = incoming.pin || generatePin();
-      const tokenDisplay = incoming.tokenNumber || formatOrderToken(dailyToken, pin);
+      // Query active queue to guarantee zero active-code overlap at this shop
+      let activePins = [];
+      try {
+        activePins = await getActiveJobPins(merchantId);
+      } catch {}
+
+      const pin = incoming.pin || generatePin(activePins);
+      const tokenDisplay = formatOrderToken(pin);
 
       const orderData = {
         jobId: activeJobId,
         orderId: activeJobId,
         tokenNumber: tokenDisplay,
-        dailyToken,
         pin,
         merchantId,
         merchantName: merchantProfile.shopName,
         shopCode: merchantProfile.shopCode,
-        userName: 'Customer',
-        userAvatar: '📄',
         fileName: primaryFileName,
         pages: totalPages,
         rawPages: incoming.rawPagesCount || totalPages,
@@ -107,7 +109,6 @@ export default function PaymentSelectionPage() {
       try {
         await updatePrintJob(activeJobId, {
           tokenNumber: tokenDisplay,
-          dailyToken,
           pin,
           paymentMethod: selectedMethod,
           status: selectedMethod === 'upi' ? 'paymentClaimed' : 'pending',

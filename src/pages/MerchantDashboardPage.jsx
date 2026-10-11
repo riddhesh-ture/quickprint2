@@ -1,22 +1,22 @@
 // src/pages/MerchantDashboardPage.jsx
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
-  Container, Typography, Box, Alert, CircularProgress, Dialog, DialogContent,
-  LinearProgress, Tabs, Tab, Paper, Chip, Card, CardContent, Grid, IconButton,
+  Container, Typography, Box, Alert, CircularProgress,
+  Tabs, Tab, Paper, Chip, IconButton,
   Tooltip, Fade, Snackbar, Stack
 } from '@mui/material';
 import { useNavigate, useOutletContext } from 'react-router-dom';
 import PrintQueue from '../components/MerchantView/PrintQueue';
+import { StatsOverview } from '../components/MerchantView/QuickStatCard';
+import ProcessingDialog from '../components/MerchantView/ProcessingDialog';
 import { 
   updatePrintJob, 
   deletePrintJob, 
   confirmPaymentAndIncrementStats, 
-  completePrintJob, 
-  incrementMerchantStats 
+  completePrintJob 
 } from '../supabase/db';
 import { useAuth } from '../hooks/useAuth';
 import { useCollection } from '../hooks/useSupabase';
-import { deleteFileFromStorage, deleteMultipleFilesFromStorage } from '../supabase/client';
 import { securePrint, preOpenPrintWindow } from '../utils/securePrint';
 import { calculateBillablePages, getPdfPageCount } from '../utils/fileValidation';
 import { realtimeRelay } from '../utils/realtimeRelay';
@@ -24,38 +24,10 @@ import { getJobBlob, deleteJobBlobs } from '../utils/localJobStorage';
 
 import RefreshIcon from '@mui/icons-material/Refresh';
 import PrintIcon from '@mui/icons-material/Print';
-import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
 import PaymentIcon from '@mui/icons-material/Payment';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import TodayIcon from '@mui/icons-material/Today';
-import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
 import SecurityIcon from '@mui/icons-material/Security';
 import BoltIcon from '@mui/icons-material/Bolt';
-
-const QuickStatCard = ({ title, value, icon, color = 'primary', subtitle }) => (
-  <Card sx={{ height: '100%', borderTop: 3, borderColor: `${color}.main` }}>
-    <CardContent sx={{ py: 2 }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Box>
-          <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: 0.5 }}>
-            {title}
-          </Typography>
-          <Typography variant="h4" fontWeight="bold" color={`${color}.main`}>
-            {value}
-          </Typography>
-          {subtitle && (
-            <Typography variant="caption" color="text.secondary">
-              {subtitle}
-            </Typography>
-          )}
-        </Box>
-        <Box sx={{ p: 1.5, borderRadius: 2, bgcolor: `${color}.lighter`, color: `${color}.main` }}>
-          {icon}
-        </Box>
-      </Box>
-    </CardContent>
-  </Card>
-);
 
 export default function MerchantDashboardPage() {
   const { user, userData, loading } = useAuth();
@@ -202,40 +174,21 @@ export default function MerchantDashboardPage() {
     };
   }, [jobs]);
 
-  // Update merchant stats in Supabase
-  const updateMerchantStats = async (cost, pages) => {
-    try {
-      await incrementMerchantStats(merchantId, pages, cost);
-    } catch (e) {
-      console.error('Stats update error:', e);
-    }
-  };
-
   // Safely cleanup files for a job when finished or deleted
   const cleanupJobFiles = async (job) => {
-    if (!job) return;
+    if (!job?.id) return;
     try {
-      // 1. Purge locally stored blobs from IndexedDB unconditionally for 2-4GB RAM budget
-      if (job.id) {
-        await deleteJobBlobs(job.id);
-      }
-
-      // 2. Purge files from Supabase Storage in single batch call if present
-      if (job.files && Array.isArray(job.files)) {
-        const fileUrls = job.files.map((f) => f.fileUrl).filter(Boolean);
-        if (fileUrls.length > 0) {
-          await deleteMultipleFilesFromStorage(fileUrls);
-        }
-      }
+      // Purge locally stored blobs from merchant PC IndexedDB
+      await deleteJobBlobs(job.id);
     } catch (err) {
-      console.error('Error cleaning up job files:', err);
+      console.error('Error cleaning up job blobs:', err);
     }
   };
 
   // Handle accepting and printing a job
   const handleAcceptJob = async (job) => {
     // 1. SYNCHRONOUSLY pre-open print window to bypass popup blockers completely!
-    const printWin = preOpenPrintWindow(`Print Job - ${job.userName || 'Customer'}`);
+    const printWin = preOpenPrintWindow(`Print Order #${job.pin || 'Job'}`);
 
     setProcessingJobId(job.id);
     setPrintProgress({ current: 0, total: job.files.length, fileName: '', status: 'Starting...' });
@@ -385,14 +338,7 @@ export default function MerchantDashboardPage() {
         status: nextStatus,
         cost: totalCost,
         totalPages,
-        merchantUpiId: upiId,
-        merchantName,
-        processedAt: new Date().toISOString(),
       };
-
-      if (failedFiles.length > 0) {
-        updateData.failedFiles = failedFiles;
-      }
 
       await updatePrintJob(job.id, updateData);
 
@@ -442,7 +388,6 @@ export default function MerchantDashboardPage() {
     if (!job) return;
     try {
       await confirmPaymentAndIncrementStats(job.id, merchantId, job.cost || 0, job.totalPages || 1);
-      await completePrintJob(job.id);
       await cleanupJobFiles(job);
       setSnackbar({
         open: true,
@@ -593,41 +538,13 @@ export default function MerchantDashboardPage() {
       </Box>
 
       {/* Quick Stats */}
-      <Grid container spacing={2} sx={{ mb: 3 }}>
-        <Grid item xs={6} sm={3}>
-          <QuickStatCard
-            title="Pending"
-            value={pendingJobs.length}
-            icon={<HourglassEmptyIcon />}
-            color="warning"
-          />
-        </Grid>
-        <Grid item xs={6} sm={3}>
-          <QuickStatCard
-            title="Payment"
-            value={awaitingPaymentJobs.length}
-            subtitle={paymentClaimedCount > 0 ? `${paymentClaimedCount} claimed` : undefined}
-            icon={<PaymentIcon />}
-            color={paymentClaimedCount > 0 ? 'error' : 'info'}
-          />
-        </Grid>
-        <Grid item xs={6} sm={3}>
-          <QuickStatCard
-            title="Today's Prints"
-            value={userData?.stats?.todayPrints || 0}
-            icon={<TodayIcon />}
-            color="success"
-          />
-        </Grid>
-        <Grid item xs={6} sm={3}>
-          <QuickStatCard
-            title="Today's Earnings"
-            value={`₹${(userData?.stats?.todayEarnings || 0).toFixed(2)}`}
-            icon={<AttachMoneyIcon />}
-            color="primary"
-          />
-        </Grid>
-      </Grid>
+      <StatsOverview
+        pendingCount={pendingJobs.length}
+        awaitingPaymentCount={awaitingPaymentJobs.length}
+        paymentClaimedCount={paymentClaimedCount}
+        todayPrints={userData?.stats?.todayPrints || 0}
+        todayEarnings={userData?.stats?.todayEarnings || 0}
+      />
 
       {/* Tabs */}
       <Paper sx={{ mb: 2 }}>
@@ -694,32 +611,7 @@ export default function MerchantDashboardPage() {
       </Fade>
 
       {/* Processing Dialog */}
-      <Dialog open={!!processingJobId} maxWidth="sm" fullWidth>
-        <DialogContent sx={{ textAlign: 'center', py: 4 }}>
-          <SecurityIcon sx={{ fontSize: 40, color: 'success.main', mb: 1 }} />
-          <CircularProgress size={60} sx={{ mb: 2, display: 'block', mx: 'auto' }} />
-          <Typography variant="h6" gutterBottom>
-            Secure Print in Progress
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-            {printProgress.fileName}
-          </Typography>
-          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2 }}>
-            {printProgress.status}
-          </Typography>
-          <Typography variant="body2" sx={{ mb: 1 }}>
-            File {printProgress.current} of {printProgress.total}
-          </Typography>
-          <LinearProgress
-            variant="determinate"
-            value={printProgress.total ? (printProgress.current / printProgress.total) * 100 : 0}
-            sx={{ height: 8, borderRadius: 4 }}
-          />
-          <Typography variant="caption" color="text.secondary" sx={{ mt: 2, display: 'block' }}>
-            🔒 Safe transfer: files are kept locally and deleted on job completion
-          </Typography>
-        </DialogContent>
-      </Dialog>
+      <ProcessingDialog open={!!processingJobId} printProgress={printProgress} />
 
       {/* Snackbar */}
       <Snackbar

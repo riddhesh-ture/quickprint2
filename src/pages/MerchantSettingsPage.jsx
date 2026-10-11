@@ -6,9 +6,6 @@ import {
 } from '@mui/material';
 import { QRCodeSVG } from 'qrcode.react';
 import SaveIcon from '@mui/icons-material/Save';
-import StorefrontIcon from '@mui/icons-material/Storefront';
-import PaymentIcon from '@mui/icons-material/Payment';
-import QrCode2Icon from '@mui/icons-material/QrCode2';
 import DownloadIcon from '@mui/icons-material/Download';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import { useAuth } from '../hooks/useAuth';
@@ -126,7 +123,7 @@ export default function MerchantSettingsPage() {
       await upsertMerchantProfile(user.uid, {
         ...formData,
         phone: cleanPhone,
-        pincode: cleanPincode,
+        pincode: parseInt(cleanPincode, 10) || null,
         upiId: formData.upiId.trim().toLowerCase(),
         pricePerPageBW: priceBW,
         pricePerPageColor: priceColor,

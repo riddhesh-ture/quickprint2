@@ -2,57 +2,22 @@
 import { supabase } from './client.js';
 
 // Centralized list of JSONB columns whose internal keys must NOT have case conversion applied
-export const PRESERVED_JSON_KEYS = new Set([
+const PRESERVED_JSON_KEYS = new Set([
   'files',
   'specs',
   'stats',
-  'failedFiles',
-  'failed_files',
-  'metadata'
+  'metadata',
 ]);
 
-// Special case mappings between camelCase and snake_case
+// Special case mappings between camelCase and snake_case for PostgreSQL
+// (All standard camelCase/snake_case pairs are automatically handled by regex below)
 const CAMEL_TO_SNAKE_OVERRIDES = {
   pricePerPageBW: 'price_per_page_bw',
-  pricePerPageBw: 'price_per_page_bw',
-  bwPages: 'bw_pages',
-  bWPages: 'bw_pages',
-  colorPages: 'color_pages',
-  paymentMethod: 'payment_method',
-  customerPhone: 'customer_phone',
-  customerUid: 'customer_uid',
-  customerEmail: 'customer_email',
-  customerName: 'customer_name',
-  customerPhoto: 'customer_photo',
-  customerPhotoUrl: 'customer_photo',
-  customerPhotoURL: 'customer_photo',
-  displayName: 'display_name',
-  photoUrl: 'photo_url',
-  photoURL: 'photo_url',
-  pickupCode: 'pickup_code',
-  fulfillmentPreference: 'fulfillment_preference',
-  isPrintLater: 'is_print_later',
-  lastSeenAt: 'last_seen_at',
 };
 
 const SNAKE_TO_CAMEL_OVERRIDES = {
   price_per_page_bw: 'pricePerPageBW',
   price_per_page_b_w: 'pricePerPageBW',
-  bw_pages: 'bwPages',
-  b_w_pages: 'bwPages',
-  color_pages: 'colorPages',
-  payment_method: 'paymentMethod',
-  customer_phone: 'customerPhone',
-  customer_uid: 'customerUid',
-  customer_email: 'customerEmail',
-  customer_name: 'customerName',
-  customer_photo: 'customerPhoto',
-  display_name: 'displayName',
-  photo_url: 'photoUrl',
-  pickup_code: 'pickupCode',
-  fulfillment_preference: 'fulfillmentPreference',
-  is_print_later: 'isPrintLater',
-  last_seen_at: 'lastSeenAt',
 };
 
 /**
@@ -93,7 +58,7 @@ export const toSnakeCase = (obj) => {
 
   const newObj = {};
   for (const [key, value] of Object.entries(obj)) {
-    const snakeKey = CAMEL_TO_SNAKE_OVERRIDES[key] || toSnakeColumn(key);
+    const snakeKey = toSnakeColumn(key);
     newObj[snakeKey] = (value !== null && typeof value === 'object' && !(value instanceof Date) && !PRESERVED_JSON_KEYS.has(key))
       ? toSnakeCase(value)
       : value;
@@ -110,45 +75,23 @@ export const generatePrintJobId = () => {
   return `job_${timestamp}_${randomStr}`;
 };
 
-/**
- * Generate a 4-digit pickup code for customer print orders (e.g. 'P-8421')
- * @returns {string} Formatted pickup code
- */
-export const generatePickupCode = () => {
-  const code = Math.floor(1000 + Math.random() * 9000);
-  return `P-${code}`;
-};
-
 // In-memory LRU cache (capped at 50 entries) to deduplicate merchant profile fetches
 const MAX_PROFILE_CACHE_SIZE = 50;
 const profileCache = new Map(); // merchantId -> { data, timestamp }
 
 const setCachedProfile = (merchantId, data) => {
+  if (!merchantId || !data) return;
   if (profileCache.size >= MAX_PROFILE_CACHE_SIZE) {
-    // Evict oldest entry (first key in Map iterator)
     const oldestKey = profileCache.keys().next().value;
     if (oldestKey) profileCache.delete(oldestKey);
   }
   profileCache.set(merchantId, { data, timestamp: Date.now() });
 };
 
-// In-memory LRU cache (capped at 50 entries) to deduplicate customer profile fetches
-const MAX_CUSTOMER_CACHE_SIZE = 50;
-const customerProfileCache = new Map(); // customerUid -> { data, timestamp }
-
-const setCachedCustomerProfile = (customerUid, data) => {
-  if (!customerUid || !data) return;
-  if (customerProfileCache.size >= MAX_CUSTOMER_CACHE_SIZE) {
-    const oldestKey = customerProfileCache.keys().next().value;
-    if (oldestKey) customerProfileCache.delete(oldestKey);
-  }
-  customerProfileCache.set(customerUid, { data, timestamp: Date.now() });
-};
-
 /**
  * Dynamic rollover check for UI display: ensure new day/month reflects 0 if no jobs placed yet
  */
-export const applyDynamicStatsRollover = (profile) => {
+const applyDynamicStatsRollover = (profile) => {
   if (profile?.stats && typeof profile.stats === 'object') {
     const todayStr = new Date().toISOString().split('T')[0];
     const monthStr = todayStr.substring(0, 7);
@@ -194,78 +137,65 @@ export const getMerchantProfile = async (merchantId) => {
 };
 
 /**
- * Look up a merchant profile by either their 6-character shop code (case-insensitive) or Firebase UID.
- * Checks the LRU cache first, then queries Supabase.
- * @param {string} codeOrId - 6-character shop code (e.g. 'QP7890') or merchant UID
- * @returns {Promise<Object|null>} Camel-cased merchant profile object or null
+ * Look up a merchant profile by their 4-digit shop code (e.g. 'QP-8421', '8421') or Firebase UID.
  */
 export const getMerchantByShopCodeOrId = async (codeOrId) => {
-  if (!codeOrId || typeof codeOrId !== 'string') return null;
+  if (!codeOrId) return null;
 
-  const trimmed = codeOrId.trim();
-  if (!trimmed) return null;
-
-  // Strict validation: only alphanumeric, hyphen, underscore up to 64 chars.
-  // Rejects any characters that could alter PostgREST filter syntax (commas, parens, dots, quotes).
-  if (!/^[a-zA-Z0-9_-]{1,64}$/.test(trimmed)) {
+  const trimmed = String(codeOrId).trim();
+  if (!trimmed || !/^[a-zA-Z0-9_-]{1,64}$/.test(trimmed)) {
     return null;
   }
 
-  // 1. Generate standard code variants (4-digit format support: QP-8421, 8421, QP8421)
-  const upperCode = trimmed.toUpperCase();
-  const qpFormatted = upperCode.startsWith('QP-')
-    ? upperCode
-    : (upperCode.startsWith('QP') ? `QP-${upperCode.slice(2)}` : `QP-${upperCode}`);
-  const unhyphenated = qpFormatted.replace('-', '');
-  const rawDigits = trimmed.replace(/\D/g, '');
-  const candidateCodes = new Set([upperCode, qpFormatted, unhyphenated, rawDigits].filter(Boolean));
+  // Extract numeric digits if present (e.g. from 'QP-8421' or '8421' -> 8421)
+  const digits = parseInt(trimmed.replace(/\D/g, ''), 10);
+  const hasValidDigits = !isNaN(digits) && digits > 0;
 
-  // 1. Check in-memory LRU cache first (by ID or by any matching shopCode variant)
+  // 1. Check in-memory LRU cache first
   for (const [, entry] of profileCache.entries()) {
     if (Date.now() - entry.timestamp < 60000 && entry.data) {
-      const entryCode = entry.data.shopCode ? entry.data.shopCode.toUpperCase() : null;
       if (
         entry.data.id === trimmed ||
-        (entryCode && candidateCodes.has(entryCode))
+        (hasValidDigits && Number(entry.data.shopCode) === digits)
       ) {
         return entry.data;
       }
     }
   }
 
-  // 2. Query Supabase: Single-pass PostgREST .or() query combining all shop_code variants and id
+  const formatAndCache = (raw) => {
+    if (!raw) return null;
+    const result = applyDynamicStatsRollover(toCamelCase(raw));
+    if (result?.id) setCachedProfile(result.id, result);
+    return result;
+  };
+
+  // 2. Query Supabase (strictly send integers to shop_code to avoid Postgres syntax error)
   try {
-    const codeFilters = Array.from(candidateCodes).map((c) => `shop_code.eq.${c}`);
-    const orQuery = [...codeFilters, `id.eq.${trimmed}`].join(',');
+    const orConditions = [`id.eq.${trimmed}`];
+    if (hasValidDigits) {
+      orConditions.push(`shop_code.eq.${digits}`);
+    }
 
     const { data, error } = await supabase
       .from('merchants')
       .select('*')
-      .or(orQuery)
+      .or(orConditions.join(','))
       .limit(1)
       .maybeSingle();
 
     if (error) {
-      // Fallback: If shop_code column does not exist on legacy unmigrated schemas, fallback to ID query
+      // Fallback: Query by ID directly
       const fallback = await supabase
         .from('merchants')
         .select('*')
         .eq('id', trimmed)
         .maybeSingle();
 
-      if (fallback.data) {
-        const result = applyDynamicStatsRollover(toCamelCase(fallback.data));
-        setCachedProfile(result.id, result);
-        return result;
-      }
-      return null;
+      return formatAndCache(fallback?.data);
     }
 
-    if (!data) return null;
-
-    const result = applyDynamicStatsRollover(toCamelCase(data));
-    setCachedProfile(result.id, result);
-    return result;
+    return formatAndCache(data);
   } catch (err) {
     console.error('Error fetching merchant by shop_code or id:', err);
     return null;
@@ -279,7 +209,19 @@ export const upsertMerchantProfile = async (merchantId, profileData) => {
   if (!merchantId) throw new Error('Missing merchant ID');
 
   const snakeData = toSnakeCase(profileData);
-  delete snakeData.id; // Avoid mutating primary key
+  delete snakeData.id;
+
+  // Helper to ensure clean integer persistence
+  const parseOptionalInt = (val) => {
+    if (val === undefined || val === null) return val;
+    const parsed = typeof val === 'number'
+      ? Math.floor(val)
+      : parseInt(String(val).replace(/\D/g, ''), 10);
+    return !isNaN(parsed) ? parsed : null;
+  };
+
+  if (snakeData.shop_code !== undefined) snakeData.shop_code = parseOptionalInt(snakeData.shop_code);
+  if (snakeData.pincode !== undefined) snakeData.pincode = parseOptionalInt(snakeData.pincode);
 
   const payload = {
     id: merchantId,
@@ -299,7 +241,6 @@ export const upsertMerchantProfile = async (merchantId, profileData) => {
   }
 
   const result = toCamelCase(data);
-  // Invalidate and update cache
   if (result) {
     setCachedProfile(merchantId, result);
   }
@@ -312,62 +253,108 @@ export const upsertMerchantProfile = async (merchantId, profileData) => {
 export const incrementMerchantStats = async (merchantId, pages = 0, earnings = 0) => {
   if (!merchantId) return;
 
-  const { error } = await supabase.rpc('increment_merchant_stats', {
-    p_merchant_id: merchantId,
-    p_pages: Number(pages) || 0,
-    p_earnings: Number(earnings) || 0,
-  });
+  try {
+    const { error } = await supabase.rpc('increment_merchant_stats', {
+      p_merchant_id: merchantId,
+      p_pages: Number(pages) || 0,
+      p_earnings: Number(earnings) || 0,
+    });
+    if (!error) return;
+  } catch {}
 
-  if (error) {
-    console.error('RPC increment_merchant_stats failed:', error);
+  // Fallback if RPC is not installed: fetch and update stats directly
+  try {
+    const profile = await getMerchantProfile(merchantId);
+    if (!profile) return;
+    const currentStats = profile.stats || {};
+    const updatedStats = {
+      ...currentStats,
+      totalPrints: (currentStats.totalPrints || 0) + (Number(pages) || 0),
+      totalEarnings: (currentStats.totalEarnings || 0) + (Number(earnings) || 0),
+      todayPrints: (currentStats.todayPrints || 0) + (Number(pages) || 0),
+      todayEarnings: (currentStats.todayEarnings || 0) + (Number(earnings) || 0),
+      monthPrints: (currentStats.monthPrints || 0) + (Number(pages) || 0),
+      monthEarnings: (currentStats.monthEarnings || 0) + (Number(earnings) || 0),
+    };
+    await upsertMerchantProfile(merchantId, { stats: updatedStats });
+  } catch (err) {
+    console.warn('Could not increment stats via fallback:', err);
   }
 };
 
 /**
- * Combined atomic payment confirmation + stats increment (1 single network call)
+ * Combined atomic payment confirmation + stats increment (with resilient fallback)
  */
 export const confirmPaymentAndIncrementStats = async (jobId, merchantId, cost, totalPages) => {
   if (!jobId || !merchantId) throw new Error('Missing jobId or merchantId');
 
-  const { error } = await supabase.rpc('confirm_payment_and_update_stats', {
-    p_job_id: jobId,
-    p_merchant_id: merchantId,
-    p_cost: Number(cost) || 0,
-    p_pages: Number(totalPages) || 1,
-  });
-
-  if (error) {
-    console.error('RPC confirm_payment_and_update_stats failed:', error);
-    throw error;
+  try {
+    const { error } = await supabase.rpc('confirm_payment_and_update_stats', {
+      p_job_id: jobId,
+      p_merchant_id: merchantId,
+      p_cost: Number(cost) || 0,
+      p_pages: Number(totalPages) || 1,
+    });
+    if (!error) return true;
+  } catch (rpcErr) {
+    console.warn('RPC confirm_payment_and_update_stats unavailable, using direct update:', rpcErr);
   }
+
+  // Fallback: update print job status & increment merchant stats
+  await updatePrintJob(jobId, { status: 'completed', paymentStatus: 'paid' });
+  await incrementMerchantStats(merchantId, totalPages, cost);
   return true;
 };
 
 /**
- * Atomically complete a print job in Supabase (1 single network call)
+ * Atomically complete a print job in Supabase (with fallback)
  */
 export const completePrintJob = async (jobId, merchantId) => {
   if (!jobId || !merchantId) throw new Error('Missing jobId or merchantId');
 
-  const { error } = await supabase.rpc('complete_print_job', {
-    p_job_id: jobId,
-    p_merchant_id: merchantId,
-  });
+  try {
+    const { error } = await supabase.rpc('complete_print_job', {
+      p_job_id: jobId,
+      p_merchant_id: merchantId,
+    });
+    if (!error) return true;
+  } catch {}
 
-  if (error) {
-    console.warn('RPC complete_print_job failed, falling back to updatePrintJob:', error);
-    return updatePrintJob(jobId, { status: 'completed', completedAt: new Date().toISOString() });
-  }
-  return true;
+  return updatePrintJob(jobId, { status: 'completed', completedAt: new Date().toISOString() });
 };
 
 /**
- * Create a print job with an explicit client-side ID
+ * Fetch PINs currently in use by active (pending/printing) jobs for a specific merchant.
+ * Ensures the next walk-in user gets an active-collision-free 4-digit PIN.
  */
-export const createPrintJobWithId = async (jobId, jobData) => {
-  const snakeData = toSnakeCase(jobData);
+export const getActiveJobPins = async (merchantId) => {
+  if (!merchantId) return [];
+  try {
+    const { data, error } = await supabase
+      .from('print_jobs')
+      .select('pin')
+      .eq('merchant_id', merchantId)
+      .in('status', ['pending', 'paymentClaimed', 'printing']);
+
+    if (error || !data) return [];
+    return data.map((j) => String(j.pin || '')).filter(Boolean);
+  } catch {
+    return [];
+  }
+};
+
+/**
+ * Create a print job in Supabase (accepts (jobId, jobData) or (jobData))
+ */
+export const createPrintJob = async (jobId, jobData) => {
+  const actualId = (typeof jobId === 'string' && jobId) ? jobId : generatePrintJobId();
+  const actualData = (typeof jobId === 'string' && jobId) ? (jobData || {}) : (jobId || {});
+
+  const snakeData = toSnakeCase(actualData);
+  delete snakeData.id;
+
   const payload = {
-    id: jobId,
+    id: actualId,
     ...snakeData,
     created_at: new Date().toISOString(),
   };
@@ -385,13 +372,8 @@ export const createPrintJobWithId = async (jobId, jobData) => {
   return toCamelCase(data);
 };
 
-/**
- * Create a print job with an auto-generated ID
- */
-export const createPrintJob = async (jobData) => {
-  const jobId = generatePrintJobId();
-  return createPrintJobWithId(jobId, jobData);
-};
+// Backwards-compatible alias
+export const createPrintJobWithId = createPrintJob;
 
 /**
  * Update an existing print job
@@ -434,242 +416,4 @@ export const deletePrintJob = async (jobId) => {
   return true;
 };
 
-/**
- * Retrieve all print jobs submitted by a specific customer
- * @param {string} customerUid - Firebase Auth UID of the customer
- * @returns {Promise<Array>} List of print jobs in camelCase
- */
-export const getCustomerPrintJobs = async (customerUid) => {
-  if (!customerUid) return [];
-
-  const { data, error } = await supabase
-    .from('print_jobs')
-    .select('*')
-    .eq('customer_uid', customerUid)
-    .order('created_at', { ascending: false });
-
-  if (error) {
-    console.error('Error fetching customer print jobs:', error);
-    throw error;
-  }
-
-  return toCamelCase(data || []);
-};
-
-/**
- * Look up a print job by merchant ID and pickup code (case-insensitive).
- * Supports full code ('P-8421'), raw digits ('8421'), or space-separated ('P 8421').
- * @param {string} merchantId - Merchant UID or ID
- * @param {string} pickupCode - 4-digit pickup code or raw number
- * @param {Object} [options] - Optional query options ({ onlyActive: true })
- * @returns {Promise<Object|null>} Print job object in camelCase or null
- */
-export const getPrintJobByPickupCode = async (merchantId, pickupCode, options = {}) => {
-  if (!merchantId || !pickupCode || typeof pickupCode !== 'string') return null;
-
-  const trimmed = pickupCode.trim().toUpperCase();
-  if (!trimmed) return null;
-
-  // Extract digits if pattern matches 4 digits (e.g., '8421', 'P-8421', 'P 8421', 'P8421')
-  const digitsMatch = trimmed.match(/^(?:P[- ]?)?(\d{4})$/i);
-  const searchCodes = digitsMatch
-    ? [`P-${digitsMatch[1]}`, digitsMatch[1]]
-    : [trimmed];
-
-  let query = supabase
-    .from('print_jobs')
-    .select('*')
-    .eq('merchant_id', merchantId)
-    .in('pickup_code', searchCodes);
-
-  if (options.onlyActive) {
-    query = query.not('status', 'in', '("completed","cancelled")');
-  }
-
-  const { data, error } = await query
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (error) {
-    console.error('Error fetching print job by pickup code:', error);
-    throw error;
-  }
-
-  return toCamelCase(data);
-};
-
-/**
- * Generate a collision-free pickup code for a given merchant.
- * Checks active jobs at the merchant shop to avoid code collisions.
- * @param {string} merchantId
- * @returns {Promise<string>}
- */
-export const generateUniquePickupCode = async (merchantId) => {
-  for (let attempt = 0; attempt < 5; attempt++) {
-    const code = generatePickupCode();
-    if (!merchantId) return code;
-    try {
-      const existing = await getPrintJobByPickupCode(merchantId, code, { onlyActive: true });
-      if (!existing) return code;
-    } catch {
-      return code;
-    }
-  }
-  return generatePickupCode();
-};
-
-/**
- * Update merchant fulfillment preference for a print job ('hold' vs 'preprint')
- * @param {string} jobId - Print job ID
- * @param {'hold'|'preprint'} preference - Fulfillment choice
- * @returns {Promise<Object>} Updated print job
- */
-export const updateFulfillmentPreference = async (jobId, preference) => {
-  if (!jobId) throw new Error('Missing job ID');
-
-  const validPreferences = ['hold', 'preprint'];
-  const pref = validPreferences.includes(preference) ? preference : 'hold';
-
-  return updatePrintJob(jobId, { fulfillmentPreference: pref });
-};
-
-/**
- * Cancel a print job by updating status to 'cancelled'
- * @param {string} jobId - Print job ID
- * @param {string} [customerUid] - Optional customer UID for ownership verification
- * @returns {Promise<Object>} Updated print job
- */
-export const cancelPrintJob = async (jobId, customerUid = null) => {
-  if (!jobId) throw new Error('Missing job ID');
-
-  let query = supabase
-    .from('print_jobs')
-    .update({ status: 'cancelled' })
-    .eq('id', jobId);
-
-  if (customerUid) {
-    query = query.eq('customer_uid', customerUid);
-  }
-
-  const { data, error } = await query.select().maybeSingle();
-  if (error) {
-    console.error('Error cancelling print job:', error);
-    throw error;
-  }
-  return toCamelCase(data);
-};
-
-/**
- * Create or update a customer profile in Supabase
- * @param {Object} customerData - Customer details ({ uid/id, email, displayName/name, photoURL/photoUrl })
- * @returns {Promise<Object>} Upserted customer profile
- */
-export const upsertCustomerProfile = async (customerData) => {
-  if (!customerData) throw new Error('Missing customer data');
-  const uid = customerData.uid || customerData.id;
-  if (!uid) throw new Error('Missing customer UID');
-
-  const email = customerData.email || '';
-  const displayName = customerData.displayName || customerData.name || null;
-  const photoUrl = customerData.photoURL || customerData.photoUrl || customerData.customerPhoto || customerData.photo || null;
-
-  const normalizedProfile = {
-    id: uid,
-    uid,
-    email,
-    displayName,
-    photoUrl,
-    photoURL: photoUrl,
-    lastSeenAt: new Date().toISOString(),
-  };
-
-  // Attempt RPC first (upsert_customer_profile)
-  try {
-    const { error: rpcError } = await supabase.rpc('upsert_customer_profile', {
-      p_uid: uid,
-      p_email: email,
-      p_display_name: displayName,
-      p_photo_url: photoUrl,
-    });
-
-    if (!rpcError) {
-      setCachedCustomerProfile(uid, normalizedProfile);
-      return normalizedProfile;
-    }
-  } catch (rpcErr) {
-    console.warn('RPC upsert_customer_profile unavailable, falling back to direct table upsert:', rpcErr);
-  }
-
-  // Fallback to direct table upsert
-  const payload = {
-    id: uid,
-    email,
-    display_name: displayName,
-    photo_url: photoUrl,
-    last_seen_at: new Date().toISOString(),
-  };
-
-  const { data, error } = await supabase
-    .from('customers')
-    .upsert(payload)
-    .select()
-    .maybeSingle();
-
-  if (error) {
-    console.error('Error upserting customer profile:', error);
-    // Return optimistic profile object if table does not exist yet to prevent blocking customer flow
-    setCachedCustomerProfile(uid, normalizedProfile);
-    return normalizedProfile;
-  }
-
-  const result = toCamelCase(data);
-  if (result) {
-    result.uid = result.id || uid;
-    result.photoURL = result.photoUrl || photoUrl;
-    setCachedCustomerProfile(uid, result);
-    return result;
-  }
-
-  setCachedCustomerProfile(uid, normalizedProfile);
-  return normalizedProfile;
-};
-
-/**
- * Fetch customer profile from Supabase by customer UID (Cached 60s)
- * @param {string} customerUid - Firebase Auth UID
- * @returns {Promise<Object|null>} Customer profile or null
- */
-export const getCustomerProfile = async (customerUid) => {
-  if (!customerUid) return null;
-
-  const cached = customerProfileCache.get(customerUid);
-  if (cached && Date.now() - cached.timestamp < 60000) {
-    return cached.data;
-  }
-
-  try {
-    const { data, error } = await supabase
-      .from('customers')
-      .select('*')
-      .eq('id', customerUid)
-      .maybeSingle();
-
-    if (error) {
-      console.warn('Error fetching customer profile:', error);
-      return null;
-    }
-
-    if (!data) return null;
-
-    const result = toCamelCase(data);
-    result.uid = result.id || customerUid;
-    result.photoURL = result.photoUrl || null;
-    setCachedCustomerProfile(customerUid, result);
-    return result;
-  } catch (err) {
-    console.warn('Error in getCustomerProfile:', err);
-    return null;
-  }
-};
 

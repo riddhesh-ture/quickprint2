@@ -50,6 +50,7 @@ export class RealtimeRelay {
     this.shouldReconnect = true;
     this.retryCount = 0;
     this.tokenProvider = null;
+    this.token = null;
 
     // Incoming file assembly state (for merchant receiver)
     // Key: `${jobId}_${fileIndex}`
@@ -115,7 +116,7 @@ export class RealtimeRelay {
       }, timeoutMs);
 
       const cleanup = this.subscribe((event) => {
-        if (event.type === 'connection_change' && event.connected) {
+        if ((event.type === 'connection_change' || event.type === 'presence') && event.connected) {
           clearTimeout(timer);
           cleanup();
           resolve(true);

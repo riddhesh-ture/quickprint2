@@ -3,26 +3,17 @@ import React, { useState, useEffect, useMemo } from 'react';
 import {
   Container, Typography, Box, Paper, Grid, CircularProgress,
   ToggleButton, ToggleButtonGroup, Card, CardContent, Divider,
-  Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
-  Chip, Avatar, List, ListItem, ListItemAvatar, ListItemText
+  Chip, Avatar
 } from '@mui/material';
 import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
-  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
-  AreaChart, Area, RadialBarChart, RadialBar, ComposedChart
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import TrendingDownIcon from '@mui/icons-material/TrendingDown';
 import PrintIcon from '@mui/icons-material/Print';
 import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
-import DescriptionIcon from '@mui/icons-material/Description';
-import AccessTimeIcon from '@mui/icons-material/AccessTime';
-import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
-import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
-import ImageIcon from '@mui/icons-material/Image';
-import ArticleIcon from '@mui/icons-material/Article';
 import { useAuth } from '../hooks/useAuth';
-import { useOutletContext } from 'react-router-dom';
 import { supabase } from '../supabase/client';
 import { toCamelCase } from '../supabase/db';
 

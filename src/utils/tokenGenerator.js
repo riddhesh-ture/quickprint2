@@ -3,69 +3,34 @@
  * QuickPrint Token & Identification Generator
  *
  * Distinct formats:
- * - Order Token: #<token>-<pin> (e.g. #14-8421) + optional phone suffix
+ * - Order Token: #<pin> (e.g. #8421)
  * - Merchant Shop Code: QP-XXXX (e.g. QP-8421)
  */
 
-const TOKEN_STORAGE_KEY = 'quickprint_daily_token_counter';
-
 /**
- * Generate a 4-digit numeric PIN with high entropy (1000 - 9999).
+ * Generate a 4-digit numeric PIN with collision-free check (1000 - 9999).
+ * If activePins are passed, guarantees no overlap with currently pending jobs at that shop.
  */
-export function generatePin() {
+export function generatePin(activePins = []) {
+  const activeSet = new Set(
+    (Array.isArray(activePins) ? activePins : []).map((p) => String(p).trim())
+  );
+  for (let attempt = 0; attempt < 50; attempt++) {
+    const candidate = String(Math.floor(1000 + Math.random() * 9000));
+    if (!activeSet.has(candidate)) {
+      return candidate;
+    }
+  }
   return String(Math.floor(1000 + Math.random() * 9000));
 }
 
 /**
- * Generate a sequential daily token number (#1, #2, ... #999).
- * Resets automatically each day.
+ * Format standard Order Token string: '#<pin>' (e.g. '#8421')
  */
-export function generateDailyTokenNumber() {
-  try {
-    const today = new Date().toISOString().slice(0, 10);
-    const raw = sessionStorage.getItem(TOKEN_STORAGE_KEY) || localStorage.getItem(TOKEN_STORAGE_KEY);
-    let counter = 1;
-
-    if (raw) {
-      try {
-        const parsed = JSON.parse(raw);
-        if (parsed.date === today) {
-          counter = Number(parsed.counter || 0) + 1;
-        }
-      } catch {
-        counter = 1;
-      }
-    }
-
-    const payload = JSON.stringify({ date: today, counter });
-    try { sessionStorage.setItem(TOKEN_STORAGE_KEY, payload); } catch (e) { void e; }
-    try { localStorage.setItem(TOKEN_STORAGE_KEY, payload); } catch (e) { void e; }
-
-    return counter;
-  } catch (err) {
-    void err;
-    return Math.floor(1 + Math.random() * 99);
-  }
-}
-
-/**
- * Format standard Order Token string:
- * e.g. formatOrderToken(14, '8421', '9876543210') => '#14-8421'
- *      formatOrderToken(14, '8421') => '#14-8421'
- */
-export function formatOrderToken(tokenNumber, pin, phone = null) {
-  const num = tokenNumber != null ? String(tokenNumber).replace(/^#/, '') : '14';
-  const cleanPin = pin ? String(pin).trim() : generatePin();
-  let base = `#${num}-${cleanPin}`;
-
-  if (phone) {
-    const digits = String(phone).replace(/\D/g, '');
-    if (digits.length >= 4) {
-      base += ` ( ${digits.slice(-4)})`;
-    }
-  }
-
-  return base;
+export function formatOrderToken(tokenOrPin, maybePin) {
+  const raw = maybePin || tokenOrPin;
+  const cleanPin = raw ? String(raw).replace(/\D/g, '').slice(-4) : generatePin();
+  return `#${cleanPin || '8421'}`;
 }
 
 /**
@@ -73,25 +38,13 @@ export function formatOrderToken(tokenNumber, pin, phone = null) {
  */
 export function parseOrderToken(tokenString) {
   if (!tokenString || typeof tokenString !== 'string') {
-    return { tokenNumber: null, pin: null, phoneSuffix: null };
+    return { pin: '8421', tokenNumber: '8421' };
   }
-
-  // Regex matches: #<digits>-<pin> and optional ( <digits>)
-  const match = tokenString.match(/#?(\d+)-(\d{4})(?:\s*\(\s*(\d{4})\))?/);
-  if (match) {
-    return {
-      tokenNumber: match[1],
-      pin: match[2],
-      phoneSuffix: match[3] || null,
-    };
-  }
-
-  // Fallback for simple tokens
   const cleanDigits = tokenString.replace(/\D/g, '');
+  const pin = cleanDigits.slice(-4) || '8421';
   return {
-    tokenNumber: cleanDigits ? cleanDigits.slice(0, 2) : '14',
-    pin: cleanDigits.length >= 6 ? cleanDigits.slice(-4) : '8421',
-    phoneSuffix: null,
+    pin,
+    tokenNumber: pin,
   };
 }
 

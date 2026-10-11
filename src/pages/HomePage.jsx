@@ -161,13 +161,13 @@ export default function HomePage() {
                 let val = rawVal.toUpperCase();
                 if (val.startsWith('QP-')) val = val.slice(3);
                 else if (val.startsWith('QP')) val = val.slice(2);
-                const cleaned = val.replace(/[^A-Z0-9]/g, '').slice(0, 4);
+                const cleaned = val.replace(/\D/g, '').slice(0, 4);
                 setInputCode(cleaned);
               }}
               placeholder="8421"
               error={Boolean(codeError)}
               helperText={codeError}
-              inputprops={{
+              InputProps={{
                 startAdornment: (
                   <InputAdornment position="start">
                     <Typography sx={{ fontWeight: 800, color: colors.primary, fontSize: '1.25rem', letterSpacing: '0.05em' }}>
@@ -176,7 +176,9 @@ export default function HomePage() {
                   </InputAdornment>
                 ),
               }}
-              inputprops={{
+              inputProps={{
+                inputMode: 'numeric',
+                pattern: '[0-9]*',
                 maxLength: 4,
                 style: { textAlign: 'left', fontSize: '1.25rem', fontWeight: 800, letterSpacing: '0.12em' },
               }}

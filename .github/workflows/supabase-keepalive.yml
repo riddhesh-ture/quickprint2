@@ -20,9 +20,24 @@ jobs:
             echo "::warning ::Supabase secrets (VITE_SUPABASE_PUBLISHABLE_KEY or VITE_SUPABASE_ANON_KEY) not found in GitHub repository secrets. Heartbeat skipped."
             exit 0
           fi
-          echo "Pinging Supabase REST API..."
+          echo "Pinging Supabase REST API (keepalive table)..."
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
             -H "apikey: $SUPABASE_KEY" \
             -H "Authorization: Bearer $SUPABASE_KEY" \
-            "$SUPABASE_URL/rest/v1/")
+            "$SUPABASE_URL/rest/v1/keepalive?select=id&limit=1")
+
+          # Fallback to merchants table if keepalive table not created yet
+          if [ "$STATUS" = "404" ]; then
+            echo "Keepalive table not found (404), falling back to merchants table ping..."
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+              -H "apikey: $SUPABASE_KEY" \
+              -H "Authorization: Bearer $SUPABASE_KEY" \
+              "$SUPABASE_URL/rest/v1/merchants?select=id&limit=1")
+          fi
+
           echo "Supabase responded with HTTP status: $STATUS"
+          if [ "$STATUS" -ge 200 ] && [ "$STATUS" -lt 300 ]; then
+            echo "✅ Keepalive ping successful! Database activity refreshed."
+          else
+            echo "::warning ::Received non-2xx status code: $STATUS"
+          fi

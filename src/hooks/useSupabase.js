@@ -4,7 +4,6 @@ import { toCamelCase, toSnakeColumn } from '../supabase/db';
 
 const TABLE_MAP = {
   printJobs: 'print_jobs',
-  users: 'merchants',
   merchants: 'merchants',
 };
 
@@ -152,89 +151,3 @@ export const useCollection = (collectionName, condition, maxResults = 100) => {
   return { documents, error, refetch };
 };
 
-/**
- * Hook to listen to a single document/row in Supabase in real-time.
- *
- * @param {string} collectionName The collection/table name
- * @param {string} id The unique record ID
- */
-export const useDocument = (collectionName, id) => {
-  const [document, setDocument] = useState(null);
-  const [error, setError] = useState(null);
-
-  const table = TABLE_MAP[collectionName] || collectionName;
-
-  useEffect(() => {
-    if (!id) {
-      setDocument(null);
-      return;
-    }
-
-    let isMounted = true;
-
-    // 1. Initial fetch
-    const fetchDoc = async () => {
-      try {
-        const { data, error: docErr } = await supabase
-          .from(table)
-          .select('*')
-          .eq('id', id)
-          .maybeSingle();
-
-        if (docErr) throw docErr;
-
-        if (isMounted) {
-          if (data) {
-            setDocument(toCamelCase(data));
-            setError(null);
-          } else {
-            setDocument(null);
-            setError('Record not found.');
-          }
-        }
-      } catch (err) {
-        console.error(`Error fetching document from ${table}:`, err);
-        if (isMounted) {
-          setError('Failed to fetch the document.');
-        }
-      }
-    };
-
-    fetchDoc();
-
-    // 2. Real-time changes subscription for this specific record
-    const channelId = `doc_${table}_${id}_${Date.now()}`;
-    const channel = supabase
-      .channel(channelId)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table,
-          filter: `id=eq.${id}`,
-        },
-        (payload) => {
-          if (!isMounted) return;
-
-          if (payload.eventType === 'DELETE') {
-            setDocument(null);
-          } else if (payload.new) {
-            setDocument(toCamelCase(payload.new));
-          }
-        }
-      )
-      .subscribe();
-
-    return () => {
-      isMounted = false;
-      try {
-        supabase.removeChannel(channel);
-      } catch (err) {
-        console.warn(`Error removing document channel for ${table}:`, err);
-      }
-    };
-  }, [table, id]);
-
-  return { document, error };
-};
