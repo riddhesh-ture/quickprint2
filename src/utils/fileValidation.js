@@ -1,100 +1,7 @@
 // src/utils/fileValidation.js
 
-// Allowed file types with their MIME types and extensions
-export const ALLOWED_FILE_TYPES = {
-  // PDFs
-  'application/pdf': { ext: 'pdf', name: 'PDF Document' },
-  
-  // Images
-  'image/jpeg': { ext: 'jpg', name: 'JPEG Image' },
-  'image/jpg': { ext: 'jpg', name: 'JPEG Image' },
-  'image/png': { ext: 'png', name: 'PNG Image' },
-  'image/webp': { ext: 'webp', name: 'WebP Image' },
-  
-  // Word Documents
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': { ext: 'docx', name: 'Word Document' },
-  'application/msword': { ext: 'doc', name: 'Word Document (Legacy)' },
-};
-
-export const ALLOWED_EXTENSIONS = ['pdf', 'jpg', 'jpeg', 'png', 'webp', 'doc', 'docx'];
-
-// Size thresholds
-export const REALTIME_MAX_SIZE = 25 * 1024 * 1024; // 25MB threshold for Cloudflare DO real-time fast lane
-export const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB hard maximum limit per file
-export const MAX_TOTAL_SIZE = 50 * 1024 * 1024; // 50MB hard maximum limit per job
-
-/**
- * Validate a single file
- */
-export function validateFile(file) {
-  const errors = [];
-  
-  if (!file) {
-    return { valid: false, errors: ['No file provided'] };
-  }
-
-  // Check file size (50MB hard limit)
-  if (file.size > MAX_FILE_SIZE) {
-    errors.push(`File "${file.name}" exceeds maximum allowed size of 50MB`);
-  }
-
-  // Check file type by MIME and extension
-  const mimeType = (file.type || '').toLowerCase();
-  const extension = file.name.split('.').pop()?.toLowerCase();
-
-  // Validate MIME type or extension
-  const isMimeAllowed = Boolean(ALLOWED_FILE_TYPES[mimeType]);
-  const isExtAllowed = ALLOWED_EXTENSIONS.includes(extension);
-
-  if (!isMimeAllowed && !isExtAllowed) {
-    errors.push(`File "${file.name}" has unsupported format. Allowed: PDF, Images (JPG, PNG, WebP), Word (DOC, DOCX)`);
-  }
-
-  return {
-    valid: errors.length === 0,
-    errors,
-    fileType: getFileCategory(file),
-  };
-}
-
-/**
- * Validate multiple files
- */
-export function validateFiles(files) {
-  const results = {
-    valid: true,
-    errors: [],
-    validFiles: [],
-    totalSize: 0,
-  };
-
-  if (!files || files.length === 0) {
-    return { valid: false, errors: ['No files selected'], validFiles: [], totalSize: 0 };
-  }
-
-  let totalSize = 0;
-
-  for (const file of files) {
-    const validation = validateFile(file);
-    totalSize += file.size;
-
-    if (validation.valid) {
-      results.validFiles.push(file);
-    } else {
-      results.errors.push(...validation.errors);
-      results.valid = false;
-    }
-  }
-
-  // Check total size
-  if (totalSize > MAX_TOTAL_SIZE) {
-    results.errors.push(`Total files size (${formatFileSize(totalSize)}) exceeds maximum 50MB limit`);
-    results.valid = false;
-  }
-
-  results.totalSize = totalSize;
-  return results;
-}
+// Hard limit for direct realtime document stream (no cloud storage overhead)
+export const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25MB per file
 
 /**
  * Get file category (pdf, image, document)
@@ -119,24 +26,6 @@ export function getFileCategory(file) {
 }
 
 /**
- * Get human-readable file type name
- */
-export function getFileTypeName(file) {
-  const mimeType = file.type?.toLowerCase();
-  if (ALLOWED_FILE_TYPES[mimeType]) {
-    return ALLOWED_FILE_TYPES[mimeType].name;
-  }
-  
-  const category = getFileCategory(file);
-  switch (category) {
-    case 'pdf': return 'PDF Document';
-    case 'image': return 'Image';
-    case 'document': return 'Word Document';
-    default: return 'Unknown';
-  }
-}
-
-/**
  * Format file size for display
  */
 export function formatFileSize(bytes) {
@@ -145,13 +34,6 @@ export function formatFileSize(bytes) {
   const sizes = ['Bytes', 'KB', 'MB', 'GB'];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-}
-
-/**
- * Get accept string for file input
- */
-export function getAcceptString() {
-  return 'application/pdf,image/jpeg,image/png,image/webp,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.pdf,.jpg,.jpeg,.png,.webp,.doc,.docx';
 }
 
 /**
@@ -197,15 +79,6 @@ export function calculateBillablePages(totalDocumentPages = 1, pagesSpec = '', d
     return Math.ceil(pages / 2);
   }
   return pages;
-}
-
-/**
- * Calculate sheets required for duplex printing (halved pages)
- * @param {number} pages
- * @returns {number}
- */
-export function calculateDuplexSheets(pages = 1) {
-  return Math.max(1, Math.ceil((pages || 1) / 2));
 }
 
 /**

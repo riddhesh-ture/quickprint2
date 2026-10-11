@@ -2,8 +2,21 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import {
-  Container, Paper, Typography, TextField, Button, Box, Alert,
-  Stepper, Step, StepLabel, InputAdornment, Divider, Chip, CircularProgress
+  Container,
+  Paper,
+  Typography,
+  TextField,
+  Button,
+  Box,
+  Alert,
+  Stepper,
+  Step,
+  StepLabel,
+  InputAdornment,
+  Divider,
+  Chip,
+  CircularProgress,
+  Link as MuiLink,
 } from '@mui/material';
 import StorefrontIcon from '@mui/icons-material/Storefront';
 import PersonIcon from '@mui/icons-material/Person';
@@ -16,7 +29,6 @@ import {
   signOutUser,
 } from '../firebase/auth';
 import { useAuth } from '../hooks/useAuth';
-import GoogleIcon from '@mui/icons-material/Google';
 
 const steps = ['Account', 'Shop Details', 'Payment'];
 
@@ -146,7 +158,7 @@ export default function SignupPage() {
 
   const handleNext = () => {
     setError(null);
-    
+
     // Validate current step
     if (activeStep === 0) {
       if (isGoogleAuth) {
@@ -155,38 +167,62 @@ export default function SignupPage() {
           return;
         }
       } else {
-        if (!email || !password || !confirmPassword) {
-          setError('Please fill all fields');
+        const cleanEmail = email.trim();
+        if (!cleanEmail) {
+          setError('Please enter your email address.');
           return;
         }
-        if (password !== confirmPassword) {
-          setError('Passwords do not match');
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+          setError('Please enter a valid email address.');
+          return;
+        }
+        if (!password) {
+          setError('Please enter a password.');
           return;
         }
         if (password.length < 6) {
-          setError('Password must be at least 6 characters');
+          setError('Password must be at least 6 characters.');
+          return;
+        }
+        if (password !== confirmPassword) {
+          setError('Passwords do not match.');
           return;
         }
       }
     } else if (activeStep === 1) {
-      if (!shopName.trim() || !ownerName.trim() || !phone.trim() || !address.trim() || !city.trim() || !pincode.trim()) {
-        setError('Please fill all shop details');
+      if (!shopName.trim()) {
+        setError('Please enter your shop name.');
         return;
       }
-      if (phone.trim().length !== 10) {
-        setError('Please enter a valid 10-digit phone number');
+      if (!ownerName.trim()) {
+        setError('Please enter the owner name.');
         return;
       }
-      if (pincode.trim().length !== 6) {
-        setError('Please enter a valid 6-digit pincode');
+      const cleanPhone = phone.trim();
+      if (!cleanPhone || cleanPhone.length !== 10) {
+        setError('Please enter a valid 10-digit phone number.');
+        return;
+      }
+      if (!address.trim()) {
+        setError('Please enter your shop street address.');
+        return;
+      }
+      if (!city.trim()) {
+        setError('Please enter your city.');
+        return;
+      }
+      const cleanPin = pincode.trim();
+      if (!cleanPin || cleanPin.length !== 6) {
+        setError('Please enter a valid 6-digit pincode.');
         return;
       }
     }
-    
+
     setActiveStep((prev) => prev + 1);
   };
 
   const handleBack = () => {
+    setError(null);
     setActiveStep((prev) => prev - 1);
   };
 
@@ -194,27 +230,49 @@ export default function SignupPage() {
     e.preventDefault();
     setError(null);
 
-    const cleanUpi = upiId ? upiId.trim().toLowerCase() : '';
-    if (!cleanUpi) {
-      setError('Please enter your UPI ID for receiving payments');
+    // Guard: ensure on final step
+    if (activeStep < 2) {
+      handleNext();
       return;
     }
 
-    if (!cleanUpi.includes('@')) {
-      setError('Please enter a valid UPI ID (e.g., yourname@upi)');
+    const cleanUpi = upiId ? upiId.trim().toLowerCase() : '';
+    if (!cleanUpi) {
+      setError('Please enter your UPI ID for receiving payments.');
+      return;
+    }
+
+    if (!cleanUpi.includes('@') || cleanUpi.length < 4) {
+      setError('Please enter a valid UPI ID (e.g., yourname@upi).');
+      return;
+    }
+
+    const bwPrice = parseFloat(pricePerPageBW);
+    if (isNaN(bwPrice) || bwPrice <= 0) {
+      setError('Please enter a valid price for B&W printing.');
+      return;
+    }
+
+    const colorPrice = parseFloat(pricePerPageColor);
+    if (isNaN(colorPrice) || colorPrice <= 0) {
+      setError('Please enter a valid price for Color printing.');
       return;
     }
 
     setLoading(true);
 
     try {
+      // Generate a 4-digit numeric shop code (1000 - 9999)
+      const generatedShopCode = Math.floor(1000 + Math.random() * 9000);
+
       const profilePayload = {
+        shopCode: generatedShopCode,
         shopName: shopName.trim(),
         ownerName: ownerName.trim(),
         phone: phone.trim(),
         address: address.trim(),
         city: city.trim(),
-        pincode: pincode.trim(),
+        pincode: parseInt(pincode.trim(), 10) || null,
         upiId: cleanUpi,
         pricePerPageBW: parseFloat(pricePerPageBW) || 2,
         pricePerPageColor: parseFloat(pricePerPageColor) || 5,
@@ -271,7 +329,12 @@ export default function SignupPage() {
               </Typography>
               <Paper variant="outlined" sx={{ p: 2.5, bgcolor: 'background.default', borderRadius: 2 }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1.5 }}>
-                  <GoogleIcon />
+                  <Box
+                    component="img"
+                    src="/google.svg"
+                    alt="Google"
+                    sx={{ width: 28, height: 28, display: 'block' }}
+                  />
                   <Box sx={{ flexGrow: 1 }}>
                     <Typography variant="subtitle2" color="text.secondary">
                       Signed in with Google
@@ -286,6 +349,7 @@ export default function SignupPage() {
                   Your account is securely authenticated with Google. No separate password needed.
                 </Typography>
                 <Button
+                  type="button"
                   size="small"
                   variant="text"
                   color="secondary"
@@ -307,11 +371,21 @@ export default function SignupPage() {
             </Typography>
 
             <Button
+              type="button"
               fullWidth
               variant="outlined"
               onClick={handleGoogleSignup}
               disabled={loading || isGoogleProcessing}
-              startIcon={isGoogleProcessing ? null : <GoogleIcon />}
+              startIcon={
+                isGoogleProcessing ? null : (
+                  <Box
+                    component="img"
+                    src="/google.svg"
+                    alt="Google"
+                    sx={{ width: 20, height: 20, display: 'block' }}
+                  />
+                )
+              }
               sx={{
                 py: 1.2,
                 borderColor: '#dadce0',
@@ -393,8 +467,10 @@ export default function SignupPage() {
               onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
               fullWidth
               required
-              inputprops={{
-                startAdornment: <InputAdornment position="start">+91</InputAdornment>,
+              slotProps={{
+                input: {
+                  startAdornment: <InputAdornment position="start">+91</InputAdornment>,
+                },
               }}
             />
             <Divider sx={{ my: 1 }} />
@@ -463,8 +539,10 @@ export default function SignupPage() {
                   }
                 }}
                 fullWidth
-                inputprops={{
-                  startAdornment: <InputAdornment position="start">₹</InputAdornment>,
+                slotProps={{
+                  input: {
+                    startAdornment: <InputAdornment position="start">₹</InputAdornment>,
+                  },
                 }}
               />
               <TextField
@@ -477,8 +555,10 @@ export default function SignupPage() {
                   }
                 }}
                 fullWidth
-                inputprops={{
-                  startAdornment: <InputAdornment position="start">₹</InputAdornment>,
+                slotProps={{
+                  input: {
+                    startAdornment: <InputAdornment position="start">₹</InputAdornment>,
+                  },
                 }}
               />
             </Box>
@@ -513,11 +593,18 @@ export default function SignupPage() {
         {notice && <Alert severity="info" sx={{ mb: 2 }}>{notice}</Alert>}
         {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
-        <form onSubmit={handleSubmit}>
+        <Box
+          component="form"
+          onSubmit={handleSubmit}
+          sx={{
+            '& .MuiFormLabel-asterisk': { display: 'none' },
+          }}
+        >
           {renderStepContent(activeStep)}
 
           <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 4 }}>
             <Button
+              type="button"
               disabled={activeStep === 0 || loading || isGoogleProcessing}
               onClick={handleBack}
             >
@@ -533,6 +620,7 @@ export default function SignupPage() {
               </Button>
             ) : (
               <Button
+                type="button"
                 variant="contained"
                 onClick={handleNext}
                 disabled={loading || isGoogleProcessing}
@@ -541,15 +629,24 @@ export default function SignupPage() {
               </Button>
             )}
           </Box>
-        </form>
+        </Box>
 
         <Divider sx={{ my: 3 }} />
 
         <Typography variant="body2" align="center" color="text.secondary">
           Already have an account?{' '}
-          <Link to="/merchant/login" style={{ color: 'inherit', fontWeight: 600 }}>
+          <MuiLink
+            component={Link}
+            to="/merchant/login"
+            sx={{
+              fontWeight: 600,
+              color: 'primary.main',
+              textDecoration: 'none',
+              '&:hover': { textDecoration: 'underline' },
+            }}
+          >
             Login here
-          </Link>
+          </MuiLink>
         </Typography>
       </Paper>
     </Container>

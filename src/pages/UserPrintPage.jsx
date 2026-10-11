@@ -1,7 +1,7 @@
 // src/pages/UserPrintPage.jsx
 import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { Container, Box, Typography, Stack, IconButton, Alert } from '@mui/material';
+import { Container, Box, Typography, Stack, IconButton, Alert, ToggleButtonGroup, ToggleButton } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import RemoveIcon from '@mui/icons-material/Remove';
 import { useThemeMode } from '../context/ThemeContext';
@@ -9,11 +9,10 @@ import AppHeader from '../components/Blocks/AppHeader';
 import ShopIdentityHeader from '../components/Blocks/ShopIdentityHeader';
 import PrintCard from '../components/Blocks/PrintCard';
 import DocumentCard from '../components/Blocks/DocumentCard';
-import SegmentedChoice from '../components/Blocks/SegmentedChoice';
 import TrustBanner from '../components/Blocks/TrustBanner';
 import StickyActionDock from '../components/Blocks/StickyActionDock';
 import FileUploader from '../components/UserView/FileUploader';
-import { getMerchantProfile, generatePrintJobId, createPrintJobWithId } from '../supabase/db';
+import { getMerchantProfile, generatePrintJobId, createPrintJob } from '../supabase/db';
 import { realtimeRelay } from '../utils/realtimeRelay';
 import { inspectPdfFile, calculateBillablePages } from '../utils/fileValidation';
 
@@ -23,17 +22,6 @@ const DEFAULT_DEMO_MERCHANT = {
   shopName: 'Campus Library Print Station',
   pricePerPageBW: 2,
   pricePerPageColor: 5,
-};
-
-const DEFAULT_DEMO_FILE = {
-  id: 'demo-lecture-notes',
-  file: {
-    name: 'lecture_notes_final.pdf',
-    size: 4.2 * 1024 * 1024,
-    type: 'application/pdf',
-  },
-  specs: { copies: 1, color: 'bw', sides: 'double', pageCount: 14 },
-  isDemo: true,
 };
 
 export default function UserPrintPage() {
@@ -46,19 +34,31 @@ export default function UserPrintPage() {
 
   // State
   const [merchantProfile, setMerchantProfile] = useState(DEFAULT_DEMO_MERCHANT);
-  const [files, setFiles] = useState([DEFAULT_DEMO_FILE]);
+  const [isMerchantOnline, setIsMerchantOnline] = useState(false);
+  const [files, setFiles] = useState([]);
   const [colorMode, setColorMode] = useState('bw'); // 'bw' | 'color'
   const [duplex, setDuplex] = useState(true); // true = double, false = single
   const [copies, setCopies] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(null);
 
-  // Fetch Merchant info
+  // Fetch Merchant info and monitor station real-time presence
   useEffect(() => {
     if (merchantId && merchantId !== 'campus-library-04') {
       getMerchantProfile(merchantId)
         .then((profile) => { if (profile) setMerchantProfile(profile); })
         .catch(() => setMerchantProfile(DEFAULT_DEMO_MERCHANT));
+    }
+
+    // Connect customer to relay room early to pre-warm connection & track presence
+    if (merchantId) {
+      realtimeRelay.connect(merchantId, 'customer');
+      const unsubscribe = realtimeRelay.subscribe((event) => {
+        if (event.type === 'presence') {
+          setIsMerchantOnline(Boolean(event.online));
+        }
+      });
+      return () => unsubscribe();
     }
   }, [merchantId]);
 
@@ -70,18 +70,16 @@ export default function UserPrintPage() {
         id: `${Date.now()}-${i}-${f.name}`,
         file: f,
         specs: { copies: 1, color: colorMode, sides: duplex ? 'double' : 'single', pageCount: 1, pages: 'all' },
-        isDemo: false,
         isAnalyzing: isPdf,
         error: null,
       };
     });
 
-    setFiles((prev) => [...prev.filter((item) => !item.isDemo), ...formatted]);
+    setFiles((prev) => [...prev, ...formatted]);
 
     // Inspect each PDF asynchronously
     for (const item of formatted) {
-      const isPdf = item.file.type === 'application/pdf' || item.file.name.toLowerCase().endsWith('.pdf');
-      if (isPdf) {
+      if (item.isAnalyzing) {
         try {
           const inspection = await inspectPdfFile(item.file);
           setFiles((prev) =>
@@ -165,7 +163,6 @@ export default function UserPrintPage() {
 
     try {
       const newJobId = generatePrintJobId();
-      const hasRealFiles = files.some((f) => !f.isDemo);
 
       const filesForJob = files.map((f) => ({
         name: f.file?.name || 'document.pdf',
@@ -175,25 +172,20 @@ export default function UserPrintPage() {
         specs: { ...f.specs, color: colorMode, copies, duplex, sides: duplex ? 'double' : 'single' },
       }));
 
-      // Mode 1: stream real files if available
-      if (hasRealFiles) {
-        try {
-          await realtimeRelay.ensureConnected(merchantId, 'customer');
-          const realEntries = files.filter((f) => !f.isDemo);
-          for (let i = 0; i < realEntries.length; i++) {
-            await realtimeRelay.streamFile(newJobId, i, realEntries[i].file, realEntries[i].specs);
-          }
-        } catch (relayErr) {
-          console.warn('[UserPrintPage] Relay stream notice:', relayErr);
+      // Stream uploaded files via realtime relay
+      try {
+        await realtimeRelay.ensureConnected(merchantId, 'customer');
+        for (let i = 0; i < files.length; i++) {
+          await realtimeRelay.streamFile(newJobId, i, files[i].file, files[i].specs);
         }
+      } catch (relayErr) {
+        console.warn('[UserPrintPage] Relay stream notice:', relayErr);
       }
 
       // Save metadata to database
       const jobData = {
         merchantId,
         merchantName: merchantProfile.shopName,
-        customerName: 'Customer',
-        customerAvatar: '📄',
         files: filesForJob,
         status: 'pending',
         cost: Number(estimatedCost),
@@ -205,7 +197,9 @@ export default function UserPrintPage() {
       };
 
       try {
-        await createPrintJobWithId(newJobId, jobData);
+        await createPrintJob(newJobId, jobData);
+        // Alert merchant station in real time
+        realtimeRelay.sendJobComplete(newJobId, jobData);
       } catch (dbErr) {
         console.warn('[UserPrintPage] DB registration note:', dbErr);
       }
@@ -235,6 +229,43 @@ export default function UserPrintPage() {
     }
   };
 
+  const toggleGroupSx = {
+    bgcolor: isDark ? 'rgba(255,255,255,0.05)' : '#f1f5f9',
+    p: 0.5,
+    borderRadius: '12px',
+    border: `1px solid ${colors.border}`,
+    '& .MuiToggleButtonGroup-grouped': {
+      border: 0,
+      borderRadius: '9px !important',
+      py: 0.85,
+      px: 1.5,
+      fontWeight: 700,
+      fontSize: '0.86rem',
+      textTransform: 'none',
+      color: colors.textSecondary,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 0.75,
+      '&.Mui-selected': {
+        bgcolor: isDark ? colors.primary : '#ffffff',
+        color: isDark ? '#ffffff' : colors.primary,
+        boxShadow: isDark ? '0 1px 3px rgba(0,0,0,0.3)' : '0 1px 3px rgba(15,23,42,0.08)',
+      },
+    },
+  };
+
+  const pricePillSx = (isSelected) => ({
+    px: 0.8,
+    py: 0.15,
+    borderRadius: '999px',
+    bgcolor: isSelected
+      ? (isDark ? 'rgba(255,255,255,0.2)' : 'rgba(37,99,235,0.1)')
+      : (isDark ? 'rgba(255,255,255,0.08)' : '#e2e8f0'),
+    fontSize: '10.5px',
+    fontWeight: 700,
+  });
+
   return (
     <Box sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', bgcolor: isDark ? colors.bg : '#faf8ff' }}>
       <AppHeader title="Print Documents" showBack backTo="/" />
@@ -244,6 +275,7 @@ export default function UserPrintPage() {
         <ShopIdentityHeader
           shopName={merchantProfile?.shopName}
           shopCode={merchantProfile?.shopCode}
+          isOnline={isMerchantOnline}
           pricePerPageBW={priceBW}
           pricePerPageColor={priceColor}
         />
@@ -269,7 +301,6 @@ export default function UserPrintPage() {
                 colorMode={colorMode}
                 copies={copies}
                 duplex={duplex}
-                isDemo={item.isDemo}
                 isAnalyzing={item.isAnalyzing}
                 error={item.error}
                 pageRange={item.specs?.pages}
@@ -284,26 +315,42 @@ export default function UserPrintPage() {
           <Typography variant="caption" sx={{ fontWeight: 700, color: colors.textSecondary, display: 'block', mb: 0.75 }}>
             COLOR MODE
           </Typography>
-          <SegmentedChoice
+          <ToggleButtonGroup
             value={colorMode}
-            onChange={setColorMode}
-            options={[
-              { value: 'bw', label: 'Black & White', badge: `₹${priceBW}/page` },
-              { value: 'color', label: 'Full Color', badge: `₹${priceColor}/page` },
-            ]}
-          />
+            exclusive
+            onChange={(_, val) => val && setColorMode(val)}
+            fullWidth
+            size="small"
+            sx={toggleGroupSx}
+          >
+            <ToggleButton value="bw">
+              Black & White
+              <Box component="span" sx={pricePillSx(colorMode === 'bw')}>
+                ₹{priceBW}/page
+              </Box>
+            </ToggleButton>
+            <ToggleButton value="color">
+              Full Color
+              <Box component="span" sx={pricePillSx(colorMode === 'color')}>
+                ₹{priceColor}/page
+              </Box>
+            </ToggleButton>
+          </ToggleButtonGroup>
 
           <Typography variant="caption" sx={{ fontWeight: 700, color: colors.textSecondary, display: 'block', mt: 2, mb: 0.75 }}>
             PRINT SIDES
           </Typography>
-          <SegmentedChoice
+          <ToggleButtonGroup
             value={duplex ? 'double' : 'single'}
-            onChange={(val) => setDuplex(val === 'double')}
-            options={[
-              { value: 'double', label: 'Double Sided (Duplex)' },
-              { value: 'single', label: 'Single Sided' },
-            ]}
-          />
+            exclusive
+            onChange={(_, val) => val && setDuplex(val === 'double')}
+            fullWidth
+            size="small"
+            sx={toggleGroupSx}
+          >
+            <ToggleButton value="double">Double Sided (Duplex)</ToggleButton>
+            <ToggleButton value="single">Single Sided</ToggleButton>
+          </ToggleButtonGroup>
 
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mt: 2.5 }}>
             <Typography variant="body2" sx={{ fontWeight: 700, color: colors.text }}>

@@ -3,35 +3,31 @@ import { Navigate, Outlet } from 'react-router-dom';
 import { onIdTokenChanged } from 'firebase/auth';
 import { auth } from '../firebase/config';
 import { getMerchantProfile } from '../supabase/db';
-import { setSupabaseAuthToken, setSupabaseAuthTokenProvider } from '../supabase/client';
 import { Box, CircularProgress, Alert, Button, Typography } from '@mui/material';
 import WifiOffIcon from '@mui/icons-material/WifiOff';
 
 export const AuthContext = createContext();
 
+const STORAGE_KEY = 'quickprint_merchant_session';
+
+const getStoredSession = () => {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+};
+
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
-  const [userData, setUserData] = useState(null); // Holds merchant profile from Supabase
-  const [loading, setLoading] = useState(true);
+  const [userData, setUserData] = useState(getStoredSession);
+  // If we already have a cached merchant profile, don't block the UI with a full-page spinner
+  const [loading, setLoading] = useState(() => !getStoredSession());
   const [authError, setAuthError] = useState(null);
 
   // Request sequence counter to discard stale out-of-order profile fetches
   const fetchSeqRef = useRef(0);
-
-  // Register dynamic token provider for auto-refreshing expired Supabase queries
-  useEffect(() => {
-    setSupabaseAuthTokenProvider(async () => {
-      const currentUser = auth.currentUser;
-      if (currentUser && typeof currentUser.getIdToken === 'function') {
-        try {
-          return await currentUser.getIdToken(true);
-        } catch (e) {
-          console.warn('Could not refresh Firebase ID token:', e);
-        }
-      }
-      return null;
-    });
-  }, []);
 
   const fetchProfile = async (uid, email, retries = 3) => {
     const currentSeq = ++fetchSeqRef.current;
@@ -39,7 +35,6 @@ export const AuthProvider = ({ children }) => {
       let profile = await getMerchantProfile(uid);
 
       // Race condition defense for merchant signup:
-      // If profile is not found immediately, retry with brief backoff in case signUpMerchant's upsert is in flight
       if (!profile && retries > 0) {
         for (let i = 0; i < retries && !profile; i++) {
           await new Promise((res) => setTimeout(res, 350 * (i + 1)));
@@ -53,16 +48,23 @@ export const AuthProvider = ({ children }) => {
       if (profile) {
         setUserData(profile);
         setAuthError(null);
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(profile)); } catch {}
         return profile;
       } else {
-        // Safe default: standard user role, but NEVER downgrade an already verified merchant profile
-        setUserData((prev) => (prev?.role === 'merchant' ? prev : { email, role: 'user' }));
-        return { email, role: 'user' };
+        const fallback = { email, role: 'user' };
+        setUserData((prev) => (prev?.role === 'merchant' ? prev : fallback));
+        return fallback;
       }
     } catch (fetchErr) {
-      console.error("Error fetching merchant profile from Supabase:", fetchErr);
+      console.warn("Could not fetch remote merchant profile, checking local session:", fetchErr);
       if (currentSeq === fetchSeqRef.current) {
-        // If we already have userData, keep it (do not wipe on transient network error)
+        const cached = getStoredSession();
+        if (cached && cached.role === 'merchant') {
+          // Keep user logged in seamlessly with cached profile
+          setUserData(cached);
+          setAuthError(null);
+          return cached;
+        }
         setUserData((prev) => prev || null);
         setAuthError('Failed to load merchant profile. Please check your network connection.');
       }
@@ -75,21 +77,15 @@ export const AuthProvider = ({ children }) => {
     const unsubscribe = onIdTokenChanged(auth, async (firebaseUser) => {
       try {
         if (firebaseUser) {
-          try {
-            const token = await firebaseUser.getIdToken();
-            setSupabaseAuthToken(token);
-          } catch (tokenErr) {
-            console.warn("Could not retrieve Firebase ID token for Supabase client:", tokenErr);
-          }
           setUser(firebaseUser);
           await fetchProfile(firebaseUser.uid, firebaseUser.email);
         } else {
           // User is signed out
           fetchSeqRef.current++;
-          setSupabaseAuthToken(null);
           setUser(null);
           setUserData(null);
           setAuthError(null);
+          try { localStorage.removeItem(STORAGE_KEY); } catch {}
         }
       } catch (err) {
         console.error("Auth state change error:", err);
@@ -106,6 +102,7 @@ export const AuthProvider = ({ children }) => {
       fetchSeqRef.current++;
       setUserData(directProfile);
       setAuthError(null);
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(directProfile)); } catch {}
       return directProfile;
     }
     const currentUser = auth.currentUser;
@@ -121,6 +118,11 @@ export const AuthProvider = ({ children }) => {
     fetchSeqRef.current++;
     setUserData(profile);
     setAuthError(null);
+    if (profile) {
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(profile)); } catch {}
+    } else {
+      try { localStorage.removeItem(STORAGE_KEY); } catch {}
+    }
   };
 
   // The value includes user, userData, loading state, error state, refresh function, and direct setter
@@ -128,7 +130,7 @@ export const AuthProvider = ({ children }) => {
 
   return (
     <AuthContext.Provider value={value}>
-      {loading ? (
+      {loading && !userData ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
           <CircularProgress />
         </Box>
@@ -150,7 +152,12 @@ export const MerchantProtectedRoute = () => {
   const { user, userData, loading, authError, refreshProfile } = context || {};
   const [retrying, setRetrying] = useState(false);
 
-  if (loading) {
+  // If local merchant session exists, allow instant access without blocking
+  if (userData?.role === 'merchant') {
+    return <Outlet />;
+  }
+
+  if (loading && !userData) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
         <CircularProgress />

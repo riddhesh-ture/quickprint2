@@ -26,7 +26,7 @@ export default function FileUploader({ onFilesAdded, hasFiles = false }) {
     if (rejectedFiles && rejectedFiles.length > 0) {
       const errors = rejectedFiles.map((f) => {
         if (f.errors?.[0]?.code === 'file-too-large') {
-          return `${f.file.name}: Exceeds maximum 50MB size limit`;
+          return `${f.file.name}: Exceeds maximum 25MB size limit`;
         }
         if (f.errors?.[0]?.code === 'file-invalid-type') {
           return `${f.file.name}: Unsupported format. Only PDF, Images (JPG, PNG, WebP), and Word (DOC, DOCX) allowed`;
@@ -42,7 +42,7 @@ export default function FileUploader({ onFilesAdded, hasFiles = false }) {
     }
   }, [onFilesAdded]);
 
-  const { getRootProps, getinputprops, isDragActive } = useDropzone({
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     accept: {
       'application/pdf': ['.pdf'],
@@ -52,7 +52,7 @@ export default function FileUploader({ onFilesAdded, hasFiles = false }) {
       'application/msword': ['.doc'],
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
     },
-    maxSize: MAX_FILE_SIZE, // 50MB
+    maxSize: MAX_FILE_SIZE, // 25MB
     multiple: true,
   });
 
@@ -150,7 +150,7 @@ export default function FileUploader({ onFilesAdded, hasFiles = false }) {
             },
           }}
         >
-          <input {...getinputprops()} />
+          <input {...getInputProps()} />
           <Box
             sx={{
               width: 32,
@@ -203,7 +203,7 @@ export default function FileUploader({ onFilesAdded, hasFiles = false }) {
             },
           }}
         >
-          <input {...getinputprops()} />
+          <input {...getInputProps()} />
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
             <Box
               sx={{
@@ -233,7 +233,7 @@ export default function FileUploader({ onFilesAdded, hasFiles = false }) {
                 Select Document to Print
               </Typography>
               <Typography variant="caption" sx={{ color: colors.textSecondary, display: 'block' }}>
-                Tap to browse • PDF, Images, Word (Up to 50MB)
+                Tap to browse • PDF, Images, Word (Up to 25MB)
               </Typography>
             </Box>
           </Box>
@@ -278,7 +278,7 @@ export default function FileUploader({ onFilesAdded, hasFiles = false }) {
             },
           }}
         >
-          <input {...getinputprops()} />
+          <input {...getInputProps()} />
           <Box
             sx={{
               width: 52,

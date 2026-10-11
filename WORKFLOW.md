@@ -1,55 +1,37 @@
 # QuickPrint Core Workflow
 
-This document outlines the end-to-end user and merchant lifecycle for QuickPrint.
+A zero-login walk-in kiosk service connecting customers to print stations with direct realtime file streaming and single 4-digit pickup PINs.
 
 ---
 
-## 1. Shop Access & Discovery
-- **Action**: User visits the website (`/`).
-- **Entry Method**:
-  - **Scan QR Code**: Camera scanner resolves shop URL/code directly.
-  - **Enter 4-Digit Shop Code**: User inputs the merchant's 4-digit shop code (e.g., `8421` or `QP-8421`).
-- **Destination**: Redirects user to `/print?merchantId=<shop_id>`.
+## 1. Station Discovery (`/`)
+* **QR Scan**: Camera scanner resolves counter station URL directly.
+* **4-Digit Shop Code**: User types 4-digit numeric code (e.g. `8421` with fixed `QP-` UI prefix).
+* **Live Presence**: Station online/offline status is pre-warmed and verified via Realtime Relay.
 
----
+## 2. Document Specs & Direct Relay (`/print`)
+* **Upload**: Up to 25MB documents (PDF, DOCX, images) with client-side page counting.
+* **Configuration**: Color mode (B&W / Color), Duplex (Single / Double-sided), copies, and dynamic pricing.
+* **Direct Transfer**: Document stream relays directly to merchant workstation (zero cloud storage reliance).
 
-## 2. Document Selection & Print Options
-- **Action**: User selects files and configures print preferences (`/print`).
-- **Options**:
-  - **Color Mode**: Black & White or Color.
-  - **Sides**: Single-Sided or Double-Sided (Duplex).
-  - **Copies & Page Range**: Custom range or all pages.
-- **Pricing**: Dynamic real-time calculation based on merchant's per-page rates.
+## 3. Active-Checked 4-Digit Pickup PIN (`/payment`)
+* **Collision-Free PIN**: System checks station's active queue and assigns an unused 4-digit PIN (`1000`–`9999`), guaranteeing 0% active collision.
+* **Payment Method**: User chooses Cash at counter or UPI (with pre-filled UPI Intent link).
+* **Order Created**: Job registered in Supabase; Realtime Relay instantly pings merchant dashboard.
 
----
+## 4. Live Receipt & Verbal Counter Call (`/receipt/pending`)
+* **Single Code**: User receives `#<pin>` (e.g., `#8421`).
+* **Verbal Prompt**: *"Tell the attendant: 8421 or show this screen."*
+* **Realtime Listener**: Listens via Supabase CDC for instant in-place status flip.
 
-## 3. Transfer & 4-Digit OTP Generation
-- **Action**: User sends/uploads the document.
-- **Transfer**: Direct real-time stream / cloud fallback.
-- **Unique Code / OTP**:
-  - System generates a unique 4-digit OTP / Token (e.g. `8421` / `#14-8421`).
-- **Customer View**: Moves to payment selection (`/payment`), then to pending receipt (`/receipt/pending`).
+## 5. Merchant Station & Print Execution (`/merchant/dashboard`)
+* **Incoming Queue**: Job appears with `#<pin>`, file specs, billable pages, and amount.
+* **Accept & Print**: Merchant clicks print. Pre-opened window bypasses browser popup blockers and prints document.
+* **Memory Safety**: Chunks stored in merchant browser IndexedDB are purged immediately on job completion.
 
----
-
-## 4. Merchant Print Queue
-- **Action**: Merchant monitors incoming orders on dashboard (`/merchant/dashboard`).
-- **Real-time Alert**: New print job appears in the queue with:
-  - 4-Digit OTP / Token
-  - File name, billable page counts, color/duplex specs
-  - Total bill amount
-- **Print Action**: Merchant clicks **"Accept & Print"** to send document directly to physical printer.
-
----
-
-## 5. Payment & Settlement
-- **After Printing**:
-  - **Cash Option**: User pays cash directly at the counter.
-  - **UPI Option**: User scans merchant QR / pays via UPI and shows payment screenshot to merchant.
-
----
-
-## 6. Fulfillment & Handover
-- **Action**: Merchant verifies payment and clicks **"Done (Paid)"**.
-- **Real-time Update**: User's receipt screen updates instantly to green (**"Print Completed & Ready!"**).
-- **Handover**: Merchant hands physical printed document to user.
+## 6. Payment & Atomic Completion
+* **Payment**: Customer pays cash or shows UPI screenshot at the counter.
+* **Done (Paid)**: Merchant clicks complete, invoking atomic RPC `confirm_payment_and_update_stats`:
+  * Marks job `status = 'completed'` and sets `paid_at = NOW()`.
+  * Atomically increments merchant's daily and monthly prints & earnings.
+* **Instant Green Flip**: User's receipt flips green (*"Print Completed & Ready!"*). Physical document handed over.

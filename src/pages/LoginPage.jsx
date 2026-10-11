@@ -15,7 +15,6 @@ import {
 } from '@mui/material';
 import { signInMerchant, signInWithGoogleMerchant } from '../firebase/auth';
 import { useAuth } from '../hooks/useAuth';
-import GoogleIcon from '@mui/icons-material/Google';
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -30,18 +29,30 @@ export default function LoginPage() {
 
   // If a merchant is already logged in, redirect them immediately.
   useEffect(() => {
-    if (!loading && user && userData?.role === 'merchant') {
+    if (userData?.role === 'merchant') {
       navigate('/merchant/dashboard', { replace: true });
     }
-  }, [user, userData, loading, navigate]);
+  }, [userData, navigate]);
 
   const handleLogin = async (event) => {
     event.preventDefault();
     setError(null);
     setNotice(null);
+
+    const cleanEmail = email.trim();
+    if (!cleanEmail) {
+      setError('Please enter your email address.');
+      return;
+    }
+
+    if (!password) {
+      setError('Please enter your password.');
+      return;
+    }
+
     setIsProcessing(true);
     try {
-      await signInMerchant(email, password);
+      await signInMerchant(cleanEmail, password);
       // On success, the AuthContext will update, and the useEffect above will trigger the redirect.
     } catch (err) {
       setError(err.message || 'Failed to log in. Please check your credentials.');
@@ -105,11 +116,8 @@ export default function LoginPage() {
   return (
     <Container component="main" maxWidth="xs" sx={{ mt: 8 }}>
       <Paper elevation={3} sx={{ p: 4, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-        <Typography component="h1" variant="h5" fontWeight="bold">
+        <Typography component="h1" variant="h5" fontWeight="bold" sx={{ mb: 1 }}>
           Merchant Login
-        </Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, mb: 1 }}>
-          Sign in to manage your QuickPrint print station
         </Typography>
 
         {notice && (
@@ -118,13 +126,62 @@ export default function LoginPage() {
           </Alert>
         )}
 
-        {(error || (!userData && authError)) && (
+        {error && (
           <Alert severity="error" sx={{ mt: 2, width: '100%' }}>
-            {error || authError}
+            {error}
           </Alert>
         )}
 
-        <Box component="form" onSubmit={handleLogin} noValidate sx={{ mt: 1, width: '100%' }}>
+        <Box
+          component="form"
+          onSubmit={handleLogin}
+          sx={{
+            mt: 1,
+            width: '100%',
+            '& .MuiFormLabel-asterisk': { display: 'none' },
+          }}
+        >
+          <Button
+            type="button"
+            fullWidth
+            variant="outlined"
+            onClick={handleGoogleLogin}
+            disabled={isProcessing}
+            startIcon={
+              isGoogleProcessing ? null : (
+                <Box
+                  component="img"
+                  src="/google.svg"
+                  alt="Google"
+                  sx={{ width: 20, height: 20, display: 'block' }}
+                />
+              )
+            }
+            sx={{
+              py: 1.2,
+              borderColor: '#dadce0',
+              color: '#3c4043',
+              backgroundColor: '#fff',
+              textTransform: 'none',
+              fontSize: '0.95rem',
+              fontWeight: 500,
+              boxShadow: '0 1px 2px rgba(0,0,0,0.08)',
+              '&:hover': {
+                backgroundColor: '#f8f9fa',
+                borderColor: '#dadce0',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.15)',
+              },
+            }}
+          >
+            {isGoogleProcessing ? <CircularProgress size={24} color="inherit" /> : 'Continue with Google'}
+          </Button>
+
+          <Divider sx={{ my: 2 }}>
+            <Typography variant="body2" color="text.secondary">
+              OR
+            </Typography>
+          </Divider>
+
           <TextField
             margin="normal"
             required
@@ -160,37 +217,6 @@ export default function LoginPage() {
             disabled={isProcessing}
           >
             {isProcessing && !isGoogleProcessing ? <CircularProgress size={24} color="inherit" /> : 'Sign In'}
-          </Button>
-
-          <Divider sx={{ my: 2 }}>
-            <Typography variant="body2" color="text.secondary">
-              OR
-            </Typography>
-          </Divider>
-
-          <Button
-            fullWidth
-            variant="outlined"
-            onClick={handleGoogleLogin}
-            disabled={isProcessing}
-            startIcon={isGoogleProcessing ? null : <GoogleIcon />}
-            sx={{
-              py: 1.2,
-              borderColor: '#dadce0',
-              color: '#3c4043',
-              backgroundColor: '#fff',
-              textTransform: 'none',
-              fontSize: '0.95rem',
-              fontWeight: 500,
-              boxShadow: '0 1px 2px rgba(0,0,0,0.08)',
-              '&:hover': {
-                backgroundColor: '#f8f9fa',
-                borderColor: '#dadce0',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.15)',
-              },
-            }}
-          >
-            {isGoogleProcessing ? <CircularProgress size={24} color="inherit" /> : 'Continue with Google'}
           </Button>
 
           <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%', mt: 3 }}>

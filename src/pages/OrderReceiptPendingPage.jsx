@@ -17,6 +17,7 @@ import AppFooter from '../components/Blocks/AppFooter';
 import PrivacyDialog from '../components/Blocks/PrivacyDialog';
 import HelpDialog from '../components/Blocks/HelpDialog';
 import { supabase } from '../supabase/client';
+import { parseOrderToken } from '../utils/tokenGenerator';
 
 const DEFAULT_DEMO_ORDER = {
   orderId: 'QP-849201',
@@ -50,6 +51,9 @@ export default function OrderReceiptPendingPage() {
     duplex: Boolean(passedOrder.duplex),
     amount: String(passedOrder.amount || DEFAULT_DEMO_ORDER.amount),
   };
+
+  const pinDisplay = order.pin || (order.tokenNumber ? order.tokenNumber.replace(/\D/g, '').slice(-4) : '8421');
+  const tokenDisplay = `#${pinDisplay}`;
 
   const jobId = order.jobId || order.orderId;
 
@@ -247,7 +251,7 @@ export default function OrderReceiptPendingPage() {
                 letterSpacing: '0.04em',
               }}
             >
-              {order.tokenNumber}
+              {tokenDisplay}
             </Typography>
             <Tooltip title={copied ? 'Copied!' : 'Copy Token'} arrow>
               <Box sx={{ ml: 0.5, display: 'flex' }}>
@@ -278,8 +282,8 @@ export default function OrderReceiptPendingPage() {
             </Box>
           </Box>
 
-          <Typography variant="body2" sx={{ color: colors.textSecondary, fontSize: '0.82rem' }}>
-            Quote this token at the counter or show this screen to the attendant
+          <Typography variant="body2" sx={{ color: colors.textSecondary, fontSize: '0.86rem', mt: 0.5 }}>
+            Tell the attendant: <strong style={{ color: colors.primary }}>"{pinDisplay}"</strong> or show this screen
           </Typography>
         </PrintCard>
 

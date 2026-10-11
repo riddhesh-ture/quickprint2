@@ -106,6 +106,75 @@ function generateWatermarkHTML(merchantName = 'QuickPrint') {
   `;
 }
 
+function resolvePrintTarget(existingWindow) {
+  if (existingWindow && !existingWindow.closed) {
+    return { targetWin: existingWindow, targetDoc: existingWindow.document, iframeElem: null };
+  }
+  const iframeElem = createPrintIframe();
+  return { targetWin: iframeElem.contentWindow, targetDoc: iframeElem.contentWindow.document, iframeElem };
+}
+
+function getAfterPrintScript(blobUrl, printId) {
+  return `
+    window.onafterprint = function() {
+      try { URL.revokeObjectURL('${blobUrl}'); } catch(e) {}
+      try {
+        if (window.parent && window.parent !== window) {
+          window.parent.postMessage({ type: 'print_done', printId: '${printId}' }, '*');
+        }
+        if (window.opener) {
+          window.opener.postMessage({ type: 'print_done', printId: '${printId}' }, '*');
+          window.close();
+        }
+      } catch(e) {}
+    };
+    window.addEventListener('beforeunload', function() {
+      try { URL.revokeObjectURL('${blobUrl}'); } catch(e) {}
+    });
+  `;
+}
+
+function monitorPrintCompletion({ targetWin, blobUrl, printId, iframeElem, resolve }) {
+  const cleanup = () => {
+    try { URL.revokeObjectURL(blobUrl); } catch (_) {}
+    if (iframeElem && iframeElem.parentNode) {
+      iframeElem.parentNode.removeChild(iframeElem);
+    }
+  };
+
+  let isDone = false;
+  const finish = () => {
+    if (isDone) return;
+    isDone = true;
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('message', handleMsg);
+    }
+    cleanup();
+    resolve();
+  };
+
+  const handleMsg = (e) => {
+    if (e?.data?.type === 'print_done' && e?.data?.printId === printId) {
+      finish();
+    }
+  };
+
+  if (typeof window !== 'undefined') {
+    window.addEventListener('message', handleMsg);
+  }
+
+  if (targetWin) {
+    try {
+      targetWin.addEventListener('afterprint', finish, { once: true });
+    } catch (_) {
+      // Cross-window access might fail in sandboxed or cross-origin contexts
+    }
+  }
+
+  // Safety timeout fallback if browser does not fire afterprint
+  setTimeout(finish, 45000);
+}
+
 /**
  * Securely print an Image file using ObjectURL (zero base64 overhead)
  */
@@ -116,20 +185,7 @@ export async function securePrintImage(fileBlob, fileName, specs, merchantName, 
   const safeMerchant = escapeHtml(merchantName);
 
   return new Promise((resolve) => {
-    let targetDoc = null;
-    let targetWin = null;
-    let iframeElem = null;
-
-    if (existingWindow && !existingWindow.closed) {
-      targetWin = existingWindow;
-      targetDoc = existingWindow.document;
-    } else {
-      // Use hidden iframe fallback to guarantee popup-blocker bypass
-      iframeElem = createPrintIframe();
-      targetWin = iframeElem.contentWindow;
-      targetDoc = targetWin.document;
-    }
-
+    const { targetWin, targetDoc, iframeElem } = resolvePrintTarget(existingWindow);
     const printId = 'pimg_' + Math.random().toString(36).slice(2);
 
     const html = `
@@ -159,21 +215,7 @@ export async function securePrintImage(fileBlob, fileName, specs, merchantName, 
               window.print();
             }, 300);
           };
-          window.onafterprint = function() {
-            try { URL.revokeObjectURL('${blobUrl}'); } catch(e) {}
-            try {
-              if (window.parent && window.parent !== window) {
-                window.parent.postMessage({ type: 'print_done', printId: '${printId}' }, '*');
-              }
-              if (window.opener) {
-                window.opener.postMessage({ type: 'print_done', printId: '${printId}' }, '*');
-                window.close();
-              }
-            } catch(e) {}
-          };
-          window.addEventListener('beforeunload', function() {
-            try { URL.revokeObjectURL('${blobUrl}'); } catch(e) {}
-          });
+          ${getAfterPrintScript(blobUrl, printId)}
         </script>
       </body>
       </html>
@@ -183,49 +225,7 @@ export async function securePrintImage(fileBlob, fileName, specs, merchantName, 
     targetDoc.write(html);
     targetDoc.close();
 
-    // Event-driven cleanup: revoke ObjectURL and remove iframe when printing completes
-    const cleanup = () => {
-      try {
-        URL.revokeObjectURL(blobUrl);
-      } catch (e) {
-        /* ignore revocation error if already revoked */
-      }
-      if (iframeElem && iframeElem.parentNode) {
-        iframeElem.parentNode.removeChild(iframeElem);
-      }
-    };
-
-    let isDone = false;
-    const finish = () => {
-      if (isDone) return;
-      isDone = true;
-      if (typeof window !== 'undefined') {
-        window.removeEventListener('message', handleMsg);
-      }
-      cleanup();
-      resolve();
-    };
-
-    const handleMsg = (e) => {
-      if (e?.data?.type === 'print_done' && e?.data?.printId === printId) {
-        finish();
-      }
-    };
-
-    if (typeof window !== 'undefined') {
-      window.addEventListener('message', handleMsg);
-    }
-
-    if (targetWin) {
-      try {
-        targetWin.addEventListener('afterprint', finish, { once: true });
-      } catch (_) {
-        // Cross-window access might fail in sandboxed or cross-origin contexts
-      }
-    }
-
-    // Safety timeout fallback if browser does not fire afterprint (e.g. headless/sandboxed)
-    setTimeout(finish, 45000);
+    monitorPrintCompletion({ targetWin, blobUrl, printId, iframeElem, resolve });
   });
 }
 
@@ -239,19 +239,7 @@ export async function securePrintPDF(fileBlob, fileName, specs, merchantName, ex
   const safeMerchant = escapeHtml(merchantName);
 
   return new Promise((resolve) => {
-    let targetDoc = null;
-    let targetWin = null;
-    let iframeElem = null;
-
-    if (existingWindow && !existingWindow.closed) {
-      targetWin = existingWindow;
-      targetDoc = existingWindow.document;
-    } else {
-      iframeElem = createPrintIframe();
-      targetWin = iframeElem.contentWindow;
-      targetDoc = targetWin.document;
-    }
-
+    const { targetWin, targetDoc, iframeElem } = resolvePrintTarget(existingWindow);
     const printId = 'ppdf_' + Math.random().toString(36).slice(2);
 
     const html = `
@@ -310,22 +298,7 @@ export async function securePrintPDF(fileBlob, fileName, specs, merchantName, ex
           }
 
           renderAndPrint();
-
-          window.onafterprint = function() {
-            try { URL.revokeObjectURL('${blobUrl}'); } catch(e) {}
-            try {
-              if (window.parent && window.parent !== window) {
-                window.parent.postMessage({ type: 'print_done', printId: '${printId}' }, '*');
-              }
-              if (window.opener) {
-                window.opener.postMessage({ type: 'print_done', printId: '${printId}' }, '*');
-                window.close();
-              }
-            } catch(e) {}
-          };
-          window.addEventListener('beforeunload', function() {
-            try { URL.revokeObjectURL('${blobUrl}'); } catch(e) {}
-          });
+          ${getAfterPrintScript(blobUrl, printId)}
         </script>
       </body>
       </html>
@@ -335,49 +308,7 @@ export async function securePrintPDF(fileBlob, fileName, specs, merchantName, ex
     targetDoc.write(html);
     targetDoc.close();
 
-    // Event-driven cleanup: revoke ObjectURL and remove iframe when printing completes
-    const cleanup = () => {
-      try {
-        URL.revokeObjectURL(blobUrl);
-      } catch (e) {
-        /* ignore revocation error if already revoked */
-      }
-      if (iframeElem && iframeElem.parentNode) {
-        iframeElem.parentNode.removeChild(iframeElem);
-      }
-    };
-
-    let isDone = false;
-    const finish = () => {
-      if (isDone) return;
-      isDone = true;
-      if (typeof window !== 'undefined') {
-        window.removeEventListener('message', handleMsg);
-      }
-      cleanup();
-      resolve();
-    };
-
-    const handleMsg = (e) => {
-      if (e?.data?.type === 'print_done' && e?.data?.printId === printId) {
-        finish();
-      }
-    };
-
-    if (typeof window !== 'undefined') {
-      window.addEventListener('message', handleMsg);
-    }
-
-    if (targetWin) {
-      try {
-        targetWin.addEventListener('afterprint', finish, { once: true });
-      } catch (_) {
-        // Cross-window access might fail in sandboxed or cross-origin contexts
-      }
-    }
-
-    // Safety timeout fallback if browser does not fire afterprint (e.g. headless/sandboxed)
-    setTimeout(finish, 45000);
+    monitorPrintCompletion({ targetWin, blobUrl, printId, iframeElem, resolve });
   });
 }
 
@@ -391,19 +322,7 @@ export async function securePrintDOCX(fileBlob, fileName, specs, merchantName, e
   const safeMerchant = escapeHtml(merchantName);
 
   return new Promise((resolve) => {
-    let targetDoc = null;
-    let targetWin = null;
-    let iframeElem = null;
-
-    if (existingWindow && !existingWindow.closed) {
-      targetWin = existingWindow;
-      targetDoc = existingWindow.document;
-    } else {
-      iframeElem = createPrintIframe();
-      targetWin = iframeElem.contentWindow;
-      targetDoc = targetWin.document;
-    }
-
+    const { targetWin, targetDoc, iframeElem } = resolvePrintTarget(existingWindow);
     const printId = 'pdocx_' + Math.random().toString(36).slice(2);
 
     const html = `
@@ -443,21 +362,7 @@ export async function securePrintDOCX(fileBlob, fileName, specs, merchantName, e
               document.getElementById('content').innerHTML = '<p style="color:red;">Error loading document.</p>';
             });
 
-          window.onafterprint = function() {
-            try { URL.revokeObjectURL('${blobUrl}'); } catch(e) {}
-            try {
-              if (window.parent && window.parent !== window) {
-                window.parent.postMessage({ type: 'print_done', printId: '${printId}' }, '*');
-              }
-              if (window.opener) {
-                window.opener.postMessage({ type: 'print_done', printId: '${printId}' }, '*');
-                window.close();
-              }
-            } catch(e) {}
-          };
-          window.addEventListener('beforeunload', function() {
-            try { URL.revokeObjectURL('${blobUrl}'); } catch(e) {}
-          });
+          ${getAfterPrintScript(blobUrl, printId)}
         </script>
       </body>
       </html>
@@ -467,49 +372,7 @@ export async function securePrintDOCX(fileBlob, fileName, specs, merchantName, e
     targetDoc.write(html);
     targetDoc.close();
 
-    // Event-driven cleanup: revoke ObjectURL and remove iframe when printing completes
-    const cleanup = () => {
-      try {
-        URL.revokeObjectURL(blobUrl);
-      } catch (e) {
-        /* ignore revocation error if already revoked */
-      }
-      if (iframeElem && iframeElem.parentNode) {
-        iframeElem.parentNode.removeChild(iframeElem);
-      }
-    };
-
-    let isDone = false;
-    const finish = () => {
-      if (isDone) return;
-      isDone = true;
-      if (typeof window !== 'undefined') {
-        window.removeEventListener('message', handleMsg);
-      }
-      cleanup();
-      resolve();
-    };
-
-    const handleMsg = (e) => {
-      if (e?.data?.type === 'print_done' && e?.data?.printId === printId) {
-        finish();
-      }
-    };
-
-    if (typeof window !== 'undefined') {
-      window.addEventListener('message', handleMsg);
-    }
-
-    if (targetWin) {
-      try {
-        targetWin.addEventListener('afterprint', finish, { once: true });
-      } catch (_) {
-        // Cross-window access might fail in sandboxed or cross-origin contexts
-      }
-    }
-
-    // Safety timeout fallback if browser does not fire afterprint (e.g. headless/sandboxed)
-    setTimeout(finish, 45000);
+    monitorPrintCompletion({ targetWin, blobUrl, printId, iframeElem, resolve });
   });
 }
 
