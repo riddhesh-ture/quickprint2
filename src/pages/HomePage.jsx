@@ -167,20 +167,22 @@ export default function HomePage() {
               placeholder="8421"
               error={Boolean(codeError)}
               helperText={codeError}
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <Typography sx={{ fontWeight: 800, color: colors.primary, fontSize: '1.25rem', letterSpacing: '0.05em' }}>
-                      QP-
-                    </Typography>
-                  </InputAdornment>
-                ),
-              }}
-              inputProps={{
-                inputMode: 'numeric',
-                pattern: '[0-9]*',
-                maxLength: 4,
-                style: { textAlign: 'left', fontSize: '1.25rem', fontWeight: 800, letterSpacing: '0.12em' },
+              slotProps={{
+                input: {
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <Typography sx={{ fontWeight: 800, color: colors.primary, fontSize: '1.25rem', letterSpacing: '0.05em' }}>
+                        QP-
+                      </Typography>
+                    </InputAdornment>
+                  ),
+                },
+                htmlInput: {
+                  inputMode: 'numeric',
+                  pattern: '[0-9]*',
+                  maxLength: 4,
+                  style: { textAlign: 'left', fontSize: '1.25rem', fontWeight: 800, letterSpacing: '0.12em' },
+                },
               }}
               sx={{ mb: 1.5 }}
             />

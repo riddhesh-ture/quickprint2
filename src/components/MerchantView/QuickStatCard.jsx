@@ -1,30 +1,48 @@
 // src/components/MerchantView/QuickStatCard.jsx
 import React from 'react';
 import { Card, CardContent, Box, Typography, Grid } from '@mui/material';
-import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
-import PaymentIcon from '@mui/icons-material/Payment';
-import TodayIcon from '@mui/icons-material/Today';
-import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
+import PrintOutlinedIcon from '@mui/icons-material/PrintOutlined';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutlined';
+import CurrencyRupeeIcon from '@mui/icons-material/CurrencyRupee';
 
 export function QuickStatCard({ title, value, icon, color = 'primary', subtitle }) {
   return (
-    <Card sx={{ height: '100%', borderTop: 3, borderColor: `${color}.main` }}>
-      <CardContent sx={{ py: 2 }}>
+    <Card
+      elevation={0}
+      variant="outlined"
+      sx={{
+        height: '100%',
+        borderRadius: 2.5,
+        borderTop: 3,
+        borderTopColor: `${color}.main`,
+      }}
+    >
+      <CardContent sx={{ py: 1.75, px: 2, '&:last-child': { pb: 1.75 } }}>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <Box>
-            <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: 0.5 }}>
+            <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 700 }}>
               {title}
             </Typography>
-            <Typography variant="h4" fontWeight="bold" color={`${color}.main`}>
+            <Typography variant="h5" fontWeight={800} color={`${color}.main`} sx={{ mt: 0.25 }}>
               {value}
             </Typography>
             {subtitle && (
-              <Typography variant="caption" color="text.secondary">
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.25 }}>
                 {subtitle}
               </Typography>
             )}
           </Box>
-          <Box sx={{ p: 1.5, borderRadius: 2, bgcolor: `${color}.lighter`, color: `${color}.main` }}>
+          <Box
+            sx={{
+              p: 1.25,
+              borderRadius: 2,
+              bgcolor: `${color}.lighter`,
+              color: `${color}.main`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
             {icon}
           </Box>
         </Box>
@@ -34,44 +52,34 @@ export function QuickStatCard({ title, value, icon, color = 'primary', subtitle 
 }
 
 export function StatsOverview({
-  pendingCount = 0,
-  awaitingPaymentCount = 0,
-  paymentClaimedCount = 0,
+  activeCount = 0,
   todayPrints = 0,
   todayEarnings = 0,
 }) {
   return (
     <Grid container spacing={2} sx={{ mb: 3 }}>
-      <Grid item xs={6} sm={3}>
+      <Grid size={{ xs: 12, sm: 4 }}>
         <QuickStatCard
-          title="Pending"
-          value={pendingCount}
-          icon={<HourglassEmptyIcon />}
-          color="warning"
+          title="Active Queue"
+          value={activeCount}
+          icon={<PrintOutlinedIcon />}
+          color={activeCount > 0 ? 'warning' : 'primary'}
+          subtitle={activeCount > 0 ? `${activeCount} pending print or pickup` : 'Counter clear'}
         />
       </Grid>
-      <Grid item xs={6} sm={3}>
-        <QuickStatCard
-          title="Payment"
-          value={awaitingPaymentCount}
-          subtitle={paymentClaimedCount > 0 ? `${paymentClaimedCount} claimed` : undefined}
-          icon={<PaymentIcon />}
-          color={paymentClaimedCount > 0 ? 'error' : 'info'}
-        />
-      </Grid>
-      <Grid item xs={6} sm={3}>
+      <Grid size={{ xs: 6, sm: 4 }}>
         <QuickStatCard
           title="Today's Prints"
           value={todayPrints}
-          icon={<TodayIcon />}
+          icon={<CheckCircleOutlineIcon />}
           color="success"
         />
       </Grid>
-      <Grid item xs={6} sm={3}>
+      <Grid size={{ xs: 6, sm: 4 }}>
         <QuickStatCard
           title="Today's Earnings"
           value={`₹${Number(todayEarnings).toFixed(2)}`}
-          icon={<AttachMoneyIcon />}
+          icon={<CurrencyRupeeIcon />}
           color="primary"
         />
       </Grid>

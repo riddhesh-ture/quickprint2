@@ -6,8 +6,9 @@ import {
   CircularProgress,
   Typography,
   LinearProgress,
+  Box,
 } from '@mui/material';
-import SecurityIcon from '@mui/icons-material/Security';
+import SecurityOutlinedIcon from '@mui/icons-material/SecurityOutlined';
 
 export default function ProcessingDialog({ open, printProgress }) {
   if (!open) return null;
@@ -17,30 +18,36 @@ export default function ProcessingDialog({ open, printProgress }) {
   const progressPercent = total ? (current / total) * 100 : 0;
 
   return (
-    <Dialog open={open} maxWidth="sm" fullWidth>
+    <Dialog open={open} maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: 3, p: 1 } }}>
       <DialogContent sx={{ textAlign: 'center', py: 4 }}>
-        <SecurityIcon sx={{ fontSize: 40, color: 'success.main', mb: 1 }} />
-        <CircularProgress size={60} sx={{ mb: 2, display: 'block', mx: 'auto' }} />
-        <Typography variant="h6" gutterBottom>
-          Secure Print in Progress
+        <CircularProgress size={52} thickness={4} sx={{ mb: 2.5 }} />
+        <Typography variant="h6" fontWeight={700} gutterBottom>
+          Printing in Progress
         </Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-          {printProgress?.fileName}
+        <Typography variant="body2" color="text.secondary" noWrap sx={{ mb: 0.5, px: 2 }}>
+          {printProgress?.fileName || 'Processing document'}
         </Typography>
-        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2 }}>
-          {printProgress?.status}
+        <Typography variant="caption" color="primary" fontWeight={600} sx={{ display: 'block', mb: 2 }}>
+          {printProgress?.status || 'Working...'}
         </Typography>
-        <Typography variant="body2" sx={{ mb: 1 }}>
-          File {current} of {total}
-        </Typography>
-        <LinearProgress
-          variant="determinate"
-          value={progressPercent}
-          sx={{ height: 8, borderRadius: 4 }}
-        />
-        <Typography variant="caption" color="text.secondary" sx={{ mt: 2, display: 'block' }}>
-          🔒 Safe transfer: files are kept locally and deleted on job completion
-        </Typography>
+
+        <Box sx={{ px: 2, mb: 2 }}>
+          <LinearProgress
+            variant="determinate"
+            value={progressPercent}
+            sx={{ height: 6, borderRadius: 3 }}
+          />
+          <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+            File {current} of {total}
+          </Typography>
+        </Box>
+
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.5, mt: 1 }}>
+          <SecurityOutlinedIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
+          <Typography variant="caption" color="text.secondary">
+            Files stored locally and deleted upon completion
+          </Typography>
+        </Box>
       </DialogContent>
     </Dialog>
   );

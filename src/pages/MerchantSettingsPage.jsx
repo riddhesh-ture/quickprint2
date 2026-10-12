@@ -8,6 +8,9 @@ import { QRCodeSVG } from 'qrcode.react';
 import SaveIcon from '@mui/icons-material/Save';
 import DownloadIcon from '@mui/icons-material/Download';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import StorefrontIcon from '@mui/icons-material/Storefront';
+import PaymentIcon from '@mui/icons-material/Payment';
+import QrCode2Icon from '@mui/icons-material/QrCode2';
 import { useAuth } from '../hooks/useAuth';
 import { upsertMerchantProfile } from '../supabase/db';
 
@@ -209,7 +212,7 @@ export default function MerchantSettingsPage() {
 
       <Grid container spacing={3}>
         {/* Shop Details */}
-        <Grid item xs={12} md={8}>
+        <Grid size={{ xs: 12, md: 8 }}>
           <Paper sx={{ p: 3, mb: 3 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 3 }}>
               <StorefrontIcon color="primary" />
@@ -217,7 +220,7 @@ export default function MerchantSettingsPage() {
             </Box>
             
             <Grid container spacing={2}>
-              <Grid item xs={12} sm={6}>
+              <Grid size={{ xs: 12, sm: 6 }}>
                 <TextField
                   label="Shop Name"
                   value={formData.shopName}
@@ -225,19 +228,21 @@ export default function MerchantSettingsPage() {
                   fullWidth
                 />
               </Grid>
-              <Grid item xs={12} sm={6}>
+              <Grid size={{ xs: 12, sm: 6 }}>
                 <TextField
                   label="Shop Code (Customer Lookup)"
                   value={shopCode || 'Auto-generated on creation'}
                   fullWidth
-                  inputprops={{
-                    readOnly: true,
-                    sx: { fontFamily: 'monospace', fontWeight: 'bold', letterSpacing: 1.5 },
+                  slotProps={{
+                    htmlInput: {
+                      readOnly: true,
+                      style: { fontFamily: 'monospace', fontWeight: 'bold', letterSpacing: 1.5 },
+                    },
                   }}
                   helperText="Customers can enter this 4-digit code (e.g. 8421) on homepage"
                 />
               </Grid>
-              <Grid item xs={12} sm={6}>
+              <Grid size={{ xs: 12, sm: 6 }}>
                 <TextField
                   label="Owner Name"
                   value={formData.ownerName}
@@ -245,18 +250,20 @@ export default function MerchantSettingsPage() {
                   fullWidth
                 />
               </Grid>
-              <Grid item xs={12} sm={6}>
+              <Grid size={{ xs: 12, sm: 6 }}>
                 <TextField
                   label="Phone Number"
                   value={formData.phone}
                   onChange={handleChange('phone')}
                   fullWidth
-                  inputprops={{
-                    startAdornment: <InputAdornment position="start">+91</InputAdornment>,
+                  slotProps={{
+                    input: {
+                      startAdornment: <InputAdornment position="start">+91</InputAdornment>,
+                    },
                   }}
                 />
               </Grid>
-              <Grid item xs={12} sm={6}>
+              <Grid size={{ xs: 12, sm: 6 }}>
                 <TextField
                   label="City"
                   value={formData.city}
@@ -264,7 +271,7 @@ export default function MerchantSettingsPage() {
                   fullWidth
                 />
               </Grid>
-              <Grid item xs={12} sm={6}>
+              <Grid size={{ xs: 12, sm: 6 }}>
                 <TextField
                   label="Pincode"
                   value={formData.pincode}
@@ -272,7 +279,7 @@ export default function MerchantSettingsPage() {
                   fullWidth
                 />
               </Grid>
-              <Grid item xs={12}>
+              <Grid size={{ xs: 12 }}>
                 <TextField
                   label="Address"
                   value={formData.address}
@@ -293,7 +300,7 @@ export default function MerchantSettingsPage() {
             </Box>
             
             <Grid container spacing={2}>
-              <Grid item xs={12}>
+              <Grid size={{ xs: 12 }}>
                 <TextField
                   label="UPI ID"
                   value={formData.upiId}
@@ -303,27 +310,31 @@ export default function MerchantSettingsPage() {
                   helperText="Customers will pay directly to this UPI ID"
                 />
               </Grid>
-              <Grid item xs={12} sm={6}>
+              <Grid size={{ xs: 12, sm: 6 }}>
                 <TextField
                   label="Price per page (B&W)"
                   type="number"
                   value={formData.pricePerPageBW}
                   onChange={handleChange('pricePerPageBW')}
                   fullWidth
-                  inputprops={{
-                    startAdornment: <InputAdornment position="start">₹</InputAdornment>,
+                  slotProps={{
+                    input: {
+                      startAdornment: <InputAdornment position="start">₹</InputAdornment>,
+                    },
                   }}
                 />
               </Grid>
-              <Grid item xs={12} sm={6}>
+              <Grid size={{ xs: 12, sm: 6 }}>
                 <TextField
                   label="Price per page (Color)"
                   type="number"
                   value={formData.pricePerPageColor}
                   onChange={handleChange('pricePerPageColor')}
                   fullWidth
-                  inputprops={{
-                    startAdornment: <InputAdornment position="start">₹</InputAdornment>,
+                  slotProps={{
+                    input: {
+                      startAdornment: <InputAdornment position="start">₹</InputAdornment>,
+                    },
                   }}
                 />
               </Grid>
@@ -358,7 +369,7 @@ export default function MerchantSettingsPage() {
         </Grid>
 
         {/* QR Code Section */}
-        <Grid item xs={12} md={4}>
+        <Grid size={{ xs: 12, md: 4 }}>
           <Paper sx={{ p: 3, textAlign: 'center', position: 'sticky', top: 80 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1, mb: 2 }}>
               <QrCode2Icon color="primary" />
