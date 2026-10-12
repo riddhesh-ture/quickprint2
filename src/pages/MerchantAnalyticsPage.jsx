@@ -3,16 +3,19 @@ import React, { useState, useEffect, useMemo } from 'react';
 import {
   Container, Typography, Box, Paper, Grid, CircularProgress,
   ToggleButton, ToggleButtonGroup, Card, CardContent, Divider,
-  Chip, Avatar
+  Chip, Avatar, List, ListItem, ListItemAvatar, ListItemText
 } from '@mui/material';
 import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
-  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+  ComposedChart, AreaChart, Area
 } from 'recharts';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import TrendingDownIcon from '@mui/icons-material/TrendingDown';
 import PrintIcon from '@mui/icons-material/Print';
 import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
+import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
+import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../supabase/client';
 import { toCamelCase } from '../supabase/db';
@@ -291,7 +294,7 @@ export default function MerchantAnalyticsPage() {
     };
   }, [jobs, timeRange]);
 
-  if (loading || !userData) {
+  if (loading || !userData || loadingJobs) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
         <CircularProgress />

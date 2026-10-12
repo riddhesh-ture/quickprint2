@@ -334,7 +334,7 @@ export const getActiveJobPins = async (merchantId) => {
       .from('print_jobs')
       .select('pin')
       .eq('merchant_id', merchantId)
-      .in('status', ['pending', 'paymentClaimed', 'printing']);
+      .in('status', ['pending', 'paymentClaimed', 'printing', 'printed', 'awaitingPayment']);
 
     if (error || !data) return [];
     return data.map((j) => String(j.pin || '')).filter(Boolean);

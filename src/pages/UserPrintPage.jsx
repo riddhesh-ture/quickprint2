@@ -12,7 +12,8 @@ import DocumentCard from '../components/Blocks/DocumentCard';
 import TrustBanner from '../components/Blocks/TrustBanner';
 import StickyActionDock from '../components/Blocks/StickyActionDock';
 import FileUploader from '../components/UserView/FileUploader';
-import { getMerchantProfile, generatePrintJobId, createPrintJob } from '../supabase/db';
+import { getMerchantProfile, generatePrintJobId, createPrintJob, getActiveJobPins } from '../supabase/db';
+import { generatePin, formatOrderToken } from '../utils/tokenGenerator';
 import { realtimeRelay } from '../utils/realtimeRelay';
 import { inspectPdfFile, calculateBillablePages } from '../utils/fileValidation';
 
@@ -164,6 +165,18 @@ export default function UserPrintPage() {
     try {
       const newJobId = generatePrintJobId();
 
+      // Check active PINs currently at merchant to guarantee zero overlap
+      let activePins = [];
+      try {
+        activePins = await getActiveJobPins(merchantId);
+      } catch (pinErr) {
+        console.warn('[UserPrintPage] Active PIN query notice:', pinErr);
+      }
+
+      // Generate guaranteed unique 4-digit numeric PIN
+      const pin = generatePin(activePins);
+      const tokenNumber = formatOrderToken(pin);
+
       const filesForJob = files.map((f) => ({
         name: f.file?.name || 'document.pdf',
         size: f.file?.size || 0,
@@ -186,6 +199,8 @@ export default function UserPrintPage() {
       const jobData = {
         merchantId,
         merchantName: merchantProfile.shopName,
+        pin,
+        tokenNumber,
         files: filesForJob,
         status: 'pending',
         cost: Number(estimatedCost),
@@ -208,6 +223,8 @@ export default function UserPrintPage() {
       navigate(`/payment?merchantId=${merchantId}&jobId=${newJobId}`, {
         state: {
           jobId: newJobId,
+          pin,
+          tokenNumber,
           merchantId,
           merchantProfile,
           files: filesForJob,
