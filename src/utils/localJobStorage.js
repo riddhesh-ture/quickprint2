@@ -81,28 +81,51 @@ export async function saveJobBlob(jobId, fileIndex, blob) {
 
 /**
  * Retrieve a single file Blob by jobId and fileIndex.
+ * Always prefers the untouched original upload if an edit/spool was previously made.
  * @param {string} jobId
  * @param {number|string} fileIndex
+ * @param {boolean} preferOriginal
  * @returns {Promise<Blob|null>}
  */
-export async function getJobBlob(jobId, fileIndex) {
+export async function getJobBlob(jobId, fileIndex, preferOriginal = true) {
   try {
     const db = await getDB();
-    const id = `${jobId}_${fileIndex}`;
+    const originalBackupId = `original_${jobId}_${fileIndex}`;
+    const standardId = `${jobId}_${fileIndex}`;
 
     return new Promise((resolve, reject) => {
       const tx = db.transaction(STORE_NAME, 'readonly');
       const store = tx.objectStore(STORE_NAME);
 
-      const req = store.get(id);
-      req.onsuccess = () => {
-        if (req.result && req.result.blob) {
-          resolve(req.result.blob);
-        } else {
-          resolve(null);
-        }
-      };
-      req.onerror = () => reject(req.error);
+      if (preferOriginal) {
+        const backupReq = store.get(originalBackupId);
+        backupReq.onsuccess = () => {
+          if (backupReq.result && backupReq.result.blob) {
+            resolve(backupReq.result.blob);
+          } else {
+            const standardReq = store.get(standardId);
+            standardReq.onsuccess = () => {
+              if (standardReq.result && standardReq.result.blob) {
+                resolve(standardReq.result.blob);
+              } else {
+                resolve(null);
+              }
+            };
+            standardReq.onerror = () => reject(standardReq.error);
+          }
+        };
+        backupReq.onerror = () => reject(backupReq.error);
+      } else {
+        const req = store.get(standardId);
+        req.onsuccess = () => {
+          if (req.result && req.result.blob) {
+            resolve(req.result.blob);
+          } else {
+            resolve(null);
+          }
+        };
+        req.onerror = () => reject(req.error);
+      }
     });
   } catch (err) {
     console.error(`Failed to get Blob for job ${jobId}, file ${fileIndex}:`, err);
@@ -126,7 +149,7 @@ export async function getAllJobBlobs(jobId) {
 
       const req = index.getAll(jobId);
       req.onsuccess = () => {
-        const results = req.result || [];
+        const results = (req.result || []).filter((r) => !r.isSpool);
         results.sort((a, b) => a.fileIndex - b.fileIndex);
         resolve(results.map(r => ({ fileIndex: r.fileIndex, blob: r.blob })));
       };
@@ -135,6 +158,72 @@ export async function getAllJobBlobs(jobId) {
   } catch (err) {
     console.error(`Failed to get all Blobs for job ${jobId}:`, err);
     return [];
+  }
+}
+
+/**
+ * Save spooled/transformed print binary separately so the original customer file is NEVER overwritten.
+ * @param {string} jobId
+ * @param {number|string} fileIndex
+ * @param {Blob} blob
+ * @returns {Promise<boolean>}
+ */
+export async function saveSpoolBlob(jobId, fileIndex, blob) {
+  try {
+    const db = await getDB();
+    const id = `spool_${jobId}_${fileIndex}`;
+
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      const store = tx.objectStore(STORE_NAME);
+
+      const record = {
+        id,
+        jobId,
+        fileIndex: Number(fileIndex),
+        blob,
+        isSpool: true,
+        createdAt: Date.now(),
+      };
+
+      const req = store.put(record);
+      req.onsuccess = () => resolve(true);
+      req.onerror = () => reject(req.error);
+    });
+  } catch (err) {
+    console.error(`Failed to save Spool Blob for job ${jobId}, file ${fileIndex}:`, err);
+    throw err;
+  }
+}
+
+/**
+ * Retrieve a spooled/transformed print binary if one was created.
+ * @param {string} jobId
+ * @param {number|string} fileIndex
+ * @returns {Promise<Blob|null>}
+ */
+export async function getSpoolBlob(jobId, fileIndex) {
+  try {
+    const db = await getDB();
+    const id = `spool_${jobId}_${fileIndex}`;
+
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readonly');
+      const store = tx.objectStore(STORE_NAME);
+
+      const req = store.get(id);
+      req.onsuccess = () => {
+        if (req.result && req.result.blob) {
+          resolve(req.result.blob);
+        } else {
+          resolve(null);
+        }
+      };
+      req.onerror = () => reject(req.error);
+    });
+  } catch (err) {
+    console.error(`Failed to get Spool Blob for job ${jobId}, file ${fileIndex}:`, err);
+    return null;
   }
 }
 
@@ -210,46 +299,8 @@ export async function hasOriginalJobBlob(jobId, fileIndex) {
  * @returns {Promise<boolean>}
  */
 export async function saveEditedJobBlob(jobId, fileIndex, updatedBlob) {
-  try {
-    const db = await getDB();
-    const backupId = `original_${jobId}_${fileIndex}`;
-
-    // 1. Fetch current blob to store as backup if no backup exists yet
-    const existingOriginal = await new Promise((resolve) => {
-      const tx = db.transaction(STORE_NAME, 'readonly');
-      const store = tx.objectStore(STORE_NAME);
-      const req = store.get(backupId);
-      req.onsuccess = () => resolve(req.result?.blob || null);
-      req.onerror = () => resolve(null);
-    });
-
-    if (!existingOriginal) {
-      const currentBlob = await getJobBlob(jobId, fileIndex);
-      if (currentBlob) {
-        await new Promise((resolve, reject) => {
-          const tx = db.transaction(STORE_NAME, 'readwrite');
-          const store = tx.objectStore(STORE_NAME);
-          const req = store.put({
-            id: backupId,
-            jobId,
-            fileIndex: Number(fileIndex),
-            blob: currentBlob,
-            isBackup: true,
-            createdAt: Date.now(),
-          });
-          req.onsuccess = () => resolve(true);
-          req.onerror = () => reject(req.error);
-        });
-      }
-    }
-
-    // 2. Put updatedBlob into main slot
-    await saveJobBlob(jobId, fileIndex, updatedBlob);
-    return true;
-  } catch (err) {
-    console.error(`Failed to save edited blob for ${jobId}_${fileIndex}:`, err);
-    throw err;
-  }
+  // Always store transformed output as a spool blob without modifying original customer file
+  return saveSpoolBlob(jobId, fileIndex, updatedBlob);
 }
 
 /**
@@ -261,35 +312,60 @@ export async function saveEditedJobBlob(jobId, fileIndex, updatedBlob) {
 export async function revertJobBlob(jobId, fileIndex) {
   try {
     const db = await getDB();
-    const backupId = `original_${jobId}_${fileIndex}`;
+    const spoolId = `spool_${jobId}_${fileIndex}`;
 
-    const originalRecord = await new Promise((resolve) => {
-      const tx = db.transaction(STORE_NAME, 'readonly');
-      const store = tx.objectStore(STORE_NAME);
-      const req = store.get(backupId);
-      req.onsuccess = () => resolve(req.result || null);
-      req.onerror = () => resolve(null);
-    });
-
-    if (!originalRecord || !originalRecord.blob) {
-      return null;
-    }
-
-    // Restore to main slot and delete backup
-    await saveJobBlob(jobId, fileIndex, originalRecord.blob);
-
+    // Delete any spool record
     await new Promise((resolve) => {
       const tx = db.transaction(STORE_NAME, 'readwrite');
       const store = tx.objectStore(STORE_NAME);
-      const req = store.delete(backupId);
+      const req = store.delete(spoolId);
       req.onsuccess = () => resolve(true);
       req.onerror = () => resolve(false);
     });
 
-    return originalRecord.blob;
+    return await getJobBlob(jobId, fileIndex, true);
   } catch (err) {
     console.error(`Failed to revert job blob for ${jobId}_${fileIndex}:`, err);
     return null;
+  }
+}
+
+/**
+ * Auto-clean stale blobs older than maxAgeMs (default 24 hours) from IndexedDB.
+ * Prevents local storage accumulation of old test print files.
+ * @param {number} maxAgeMs
+ * @returns {Promise<number>} Number of purged records
+ */
+export async function cleanupStaleJobBlobs(maxAgeMs = 24 * 60 * 60 * 1000) {
+  try {
+    const db = await getDB();
+    const cutoff = Date.now() - maxAgeMs;
+
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      const store = tx.objectStore(STORE_NAME);
+      const req = store.openCursor();
+      let purgedCount = 0;
+
+      req.onsuccess = (e) => {
+        const cursor = e.target.result;
+        if (cursor) {
+          const val = cursor.value;
+          if (val && val.createdAt && val.createdAt < cutoff) {
+            cursor.delete();
+            purgedCount++;
+          }
+          cursor.continue();
+        } else {
+          resolve(purgedCount);
+        }
+      };
+
+      req.onerror = () => reject(req.error);
+    });
+  } catch (err) {
+    console.warn('cleanupStaleJobBlobs notice:', err);
+    return 0;
   }
 }
 

@@ -1,7 +1,7 @@
 // src/pages/OrderReceiptPendingPage.jsx
 import React, { useState, useEffect } from 'react';
 import { useSearchParams, useLocation, useNavigate } from 'react-router-dom';
-import { Container, Box, Typography, Button, Divider, Alert, Tooltip } from '@mui/material';
+import { Container, Box, Typography, Button, Divider, Alert, Tooltip, CircularProgress } from '@mui/material';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import PrintIcon from '@mui/icons-material/Print';
@@ -17,20 +17,6 @@ import AppFooter from '../components/Blocks/AppFooter';
 import PrivacyDialog from '../components/Blocks/PrivacyDialog';
 import HelpDialog from '../components/Blocks/HelpDialog';
 import { supabase } from '../supabase/client';
-import { parseOrderToken } from '../utils/tokenGenerator';
-
-const DEFAULT_DEMO_ORDER = {
-  orderId: 'QP-849201',
-  tokenNumber: '#14-8421',
-  merchantId: 'campus-library-04',
-  merchantName: 'Campus Library Print Station',
-  shopCode: 'QP-8421',
-  fileName: 'lecture_notes_final.pdf',
-  pages: 14,
-  amount: '28.00',
-  paymentMethod: 'upi',
-  formattedDate: 'Today, 03:42 PM',
-};
 
 export default function OrderReceiptPendingPage() {
   const [searchParams] = useSearchParams();
@@ -38,30 +24,67 @@ export default function OrderReceiptPendingPage() {
   const navigate = useNavigate();
   const { isDark, colors } = useThemeMode();
 
-  const merchantId = searchParams.get('merchantId') || 'campus-library-04';
-  const passedOrder = location.state?.order || DEFAULT_DEMO_ORDER;
+  const merchantId = searchParams.get('merchantId') || location.state?.order?.merchantId;
+  const passedOrder = location.state?.order;
+  const queryJobId = searchParams.get('jobId') || passedOrder?.jobId || passedOrder?.orderId;
 
-  const order = {
-    ...DEFAULT_DEMO_ORDER,
-    ...passedOrder,
-    tokenNumber: passedOrder.tokenNumber || '#14-8421',
-    fileName: passedOrder.fileName || DEFAULT_DEMO_ORDER.fileName,
-    pages: passedOrder.pages || DEFAULT_DEMO_ORDER.pages,
-    rawPages: passedOrder.rawPages || passedOrder.pages || DEFAULT_DEMO_ORDER.pages,
-    duplex: Boolean(passedOrder.duplex),
-    amount: String(passedOrder.amount || DEFAULT_DEMO_ORDER.amount),
-  };
+  const [loadedJob, setLoadedJob] = useState(null);
+  const [isLoading, setIsLoading] = useState(!passedOrder && Boolean(queryJobId));
 
-  const pinDisplay = order.pin || (order.tokenNumber ? order.tokenNumber.replace(/\D/g, '').slice(-4) : '8421');
-  const tokenDisplay = `#${pinDisplay}`;
+  // If no passedOrder in state, load from Supabase by jobId
+  useEffect(() => {
+    if (passedOrder || !queryJobId || !supabase) {
+      setIsLoading(false);
+      return;
+    }
 
-  const jobId = order.jobId || order.orderId;
+    setIsLoading(true);
+    supabase
+      .from('print_jobs')
+      .select('*')
+      .eq('id', queryJobId)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (!error && data) {
+          setLoadedJob({
+            jobId: data.id,
+            orderId: data.id,
+            tokenNumber: data.token_number || (data.pin ? `${data.pin}` : '0000'),
+            pin: data.pin || (data.token_number ? data.token_number.replace(/\D/g, '').slice(-4) : '0000'),
+            merchantId: data.merchant_id || merchantId,
+            merchantName: data.merchant_name || 'Print Station',
+            fileName: data.files?.[0]?.name || 'Document.pdf',
+            pages: data.total_pages || 1,
+            rawPages: data.raw_pages || data.total_pages || 1,
+            duplex: Boolean(data.specs?.duplex || data.files?.[0]?.specs?.duplex),
+            amount: String(data.cost || '0.00'),
+            paymentMethod: data.payment_method || 'cash',
+            status: data.status || 'pending',
+          });
+        }
+      })
+      .catch((err) => {
+        console.warn('[OrderReceiptPendingPage] Job fetch note:', err);
+      })
+      .finally(() => {
+        setIsLoading(false);
+      });
+  }, [passedOrder, queryJobId, merchantId]);
+
+  const activeOrder = passedOrder || loadedJob;
+  const jobId = activeOrder?.jobId || activeOrder?.orderId || queryJobId;
 
   // Realtime Status State: 'pending' | 'printing' | 'completed' | 'paid'
-  const [status, setStatus] = useState(passedOrder?.status || (passedOrder?.paymentMethod === 'upi' ? 'paymentClaimed' : 'pending'));
+  const [status, setStatus] = useState(activeOrder?.status || 'pending');
   const [copied, setCopied] = useState(false);
   const [privacyOpen, setPrivacyOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+
+  useEffect(() => {
+    if (activeOrder?.status) {
+      setStatus(activeOrder.status);
+    }
+  }, [activeOrder?.status]);
 
   // Supabase Realtime CDC subscription + Polling fallback for in-place green flip
   useEffect(() => {
@@ -87,10 +110,8 @@ export default function OrderReceiptPendingPage() {
       }
     };
 
-    // Initial check
     checkLatestStatus();
 
-    // Visibility change handler (tab switch / mobile screen unlock)
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') {
         checkLatestStatus();
@@ -98,7 +119,6 @@ export default function OrderReceiptPendingPage() {
     };
     document.addEventListener('visibilitychange', handleVisibility);
 
-    // Fallback polling interval (every 4 seconds until completed)
     const intervalId = setInterval(() => {
       checkLatestStatus();
     }, 4000);
@@ -130,11 +150,51 @@ export default function OrderReceiptPendingPage() {
     };
   }, [jobId]);
 
+  if (isLoading) {
+    return (
+      <Box sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', bgcolor: isDark ? colors.bg : '#faf8ff' }}>
+        <AppHeader title="QuickPrint" subtitle="Receipt" showBack backTo="/" />
+        <Container maxWidth="xs" sx={{ py: 6, flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2 }}>
+          <CircularProgress size={36} sx={{ color: colors.primary }} />
+          <Typography variant="body2" sx={{ color: colors.textSecondary }}>
+            Loading order details...
+          </Typography>
+        </Container>
+      </Box>
+    );
+  }
+
+  if (!activeOrder) {
+    return (
+      <Box sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', bgcolor: isDark ? colors.bg : '#faf8ff' }}>
+        <AppHeader title="QuickPrint" subtitle="Receipt" showBack backTo="/" />
+        <Container maxWidth="xs" sx={{ py: 4, flex: 1, display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+          <PrintCard title="No Order Found" subtitle="Could not locate active print receipt" elevation sx={{ textAlign: 'center', py: 3 }}>
+            <Typography variant="body2" sx={{ color: colors.textSecondary, mb: 2 }}>
+              There is no active order corresponding to this session. Start a new print job below.
+            </Typography>
+            <Button
+              variant="contained"
+              fullWidth
+              onClick={() => navigate('/')}
+              sx={{ bgcolor: colors.primary, py: 1.25, borderRadius: '12px', fontWeight: 800, textTransform: 'none' }}
+            >
+              Start Printing
+            </Button>
+          </PrintCard>
+        </Container>
+      </Box>
+    );
+  }
+
+  const pinDisplay = activeOrder.pin || (activeOrder.tokenNumber ? activeOrder.tokenNumber.replace(/\D/g, '').slice(-4) : '0000');
+  const tokenDisplay = `${pinDisplay}`;
+
   const isCompleted = status === 'completed' || status === 'paid';
   const isPrinting = status === 'printing';
 
   const handleCopyToken = () => {
-    navigator.clipboard.writeText(order.tokenNumber);
+    navigator.clipboard.writeText(pinDisplay);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -179,9 +239,9 @@ export default function OrderReceiptPendingPage() {
                 ? 'Print Completed & Ready!'
                 : isPrinting
                 ? 'Printing In Progress...'
-                : order.paymentMethod === 'upi'
-                ? `Verification Pending: ₹${order.amount}`
-                : `Payment Pending at Counter: ₹${order.amount}`}
+                : activeOrder.paymentMethod === 'upi'
+                ? `Verification Pending: ₹${activeOrder.amount}`
+                : `Payment Pending at Counter: ₹${activeOrder.amount}`}
             </Typography>
             <Typography
               variant="body2"
@@ -196,9 +256,9 @@ export default function OrderReceiptPendingPage() {
                 ? 'Your document has been printed successfully. Collect it from the counter.'
                 : isPrinting
                 ? 'The printer is actively printing your document.'
-                : order.paymentMethod === 'upi'
+                : activeOrder.paymentMethod === 'upi'
                 ? 'Show your Pickup Token and payment screenshot to the attendant for instant job release.'
-                : `Pay ₹${order.amount} in cash to the attendant upon pickup.`}
+                : `Pay ₹${activeOrder.amount} in cash to the attendant upon pickup.`}
             </Typography>
           </Box>
         </Box>
@@ -269,16 +329,16 @@ export default function OrderReceiptPendingPage() {
                 px: 1.5,
                 py: 0.35,
                 borderRadius: 999,
-                bgcolor: order.paymentMethod === 'upi'
+                bgcolor: activeOrder.paymentMethod === 'upi'
                   ? (isDark ? 'rgba(37,99,235,0.15)' : '#eff6ff')
                   : (isDark ? 'rgba(16,185,129,0.15)' : '#ecfdf5'),
-                color: order.paymentMethod === 'upi' ? colors.primary : '#10b981',
+                color: activeOrder.paymentMethod === 'upi' ? colors.primary : '#10b981',
                 fontSize: '0.78rem',
                 fontWeight: 700,
-                border: `1px solid ${order.paymentMethod === 'upi' ? (isDark ? 'rgba(37,99,235,0.3)' : '#bfdbfe') : (isDark ? 'rgba(16,185,129,0.3)' : '#a7f3d0')}`,
+                border: `1px solid ${activeOrder.paymentMethod === 'upi' ? (isDark ? 'rgba(37,99,235,0.3)' : '#bfdbfe') : (isDark ? 'rgba(16,185,129,0.3)' : '#a7f3d0')}`,
               }}
             >
-              <span>{order.paymentMethod === 'upi' ? '📱 UPI (Show Screenshot at Counter)' : '💵 Cash at Counter'}</span>
+              <span>{activeOrder.paymentMethod === 'upi' ? 'UPI (Show Screenshot at Counter)' : 'Cash at Counter'}</span>
             </Box>
           </Box>
 
@@ -288,33 +348,33 @@ export default function OrderReceiptPendingPage() {
         </PrintCard>
 
         {/* 3. Itemized Receipt Card */}
-        <PrintCard title="Receipt Details" subtitle={`Station: ${order.merchantName || 'QuickPrint'}`}>
+        <PrintCard title="Receipt Details" subtitle={`Station: ${activeOrder.merchantName || 'QuickPrint'}`}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
             <Typography variant="body2" sx={{ color: colors.textSecondary }}>File Name</Typography>
             <Typography variant="body2" noWrap sx={{ fontWeight: 700, color: colors.text, maxWidth: '60%' }}>
-              {order.fileName}
+              {activeOrder.fileName}
             </Typography>
           </Box>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
             <Typography variant="body2" sx={{ color: colors.textSecondary }}>
-              {order.duplex ? 'Total Sheets' : 'Total Pages'}
+              {activeOrder.duplex ? 'Total Sheets' : 'Total Pages'}
             </Typography>
             <Typography variant="body2" sx={{ fontWeight: 700, color: colors.text }}>
-              {order.duplex
-                ? `${order.pages} ${order.pages === 1 ? 'Sheet' : 'Sheets'} (${order.rawPages} pgs • Duplex)`
-                : `${order.pages} ${order.pages === 1 ? 'Page' : 'Pages'}`}
+              {activeOrder.duplex
+                ? `${activeOrder.pages} ${activeOrder.pages === 1 ? 'Sheet' : 'Sheets'} (${activeOrder.rawPages} pgs • Duplex)`
+                : `${activeOrder.pages} ${activeOrder.pages === 1 ? 'Page' : 'Pages'}`}
             </Typography>
           </Box>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
             <Typography variant="body2" sx={{ color: colors.textSecondary }}>Payment Method</Typography>
             <Typography variant="body2" sx={{ fontWeight: 700, color: colors.text, textTransform: 'uppercase' }}>
-              {order.paymentMethod === 'upi' ? 'UPI Transfer' : 'Cash at Counter'}
+              {activeOrder.paymentMethod === 'upi' ? 'UPI Transfer' : 'Cash at Counter'}
             </Typography>
           </Box>
           <Divider sx={{ my: 1.5, borderColor: colors.border }} />
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
             <Typography variant="subtitle1" sx={{ fontWeight: 800, color: colors.text }}>Total Amount</Typography>
-            <Typography variant="h6" sx={{ fontWeight: 800, color: colors.primary }}>₹{order.amount}</Typography>
+            <Typography variant="h6" sx={{ fontWeight: 800, color: colors.primary }}>₹{activeOrder.amount}</Typography>
           </Box>
         </PrintCard>
 
@@ -339,7 +399,7 @@ export default function OrderReceiptPendingPage() {
           <Button
             fullWidth
             variant="contained"
-            onClick={() => navigate(`/print?merchantId=${merchantId}`)}
+            onClick={() => navigate(merchantId ? `/print?merchantId=${merchantId}` : '/')}
             sx={{
               py: 1.25,
               borderRadius: '12px',

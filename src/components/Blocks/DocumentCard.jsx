@@ -22,7 +22,6 @@ export default function DocumentCard({
   colorMode = 'bw',
   copies = 1,
   duplex = true,
-  isDemo = false,
   isAnalyzing = false,
   error = null,
   pageRange,
@@ -79,21 +78,6 @@ export default function DocumentCard({
               >
                 {fileName}
               </Typography>
-              {isDemo && (
-                <Box
-                  sx={{
-                    px: 0.7,
-                    py: 0.15,
-                    borderRadius: '4px',
-                    bgcolor: isDark ? 'rgba(245,158,11,0.2)' : '#fef3c7',
-                    color: isDark ? '#fbbf24' : '#b45309',
-                    fontSize: '10px',
-                    fontWeight: 700,
-                  }}
-                >
-                  DEMO
-                </Box>
-              )}
             </Box>
 
             {fileSize && (

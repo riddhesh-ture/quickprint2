@@ -1,7 +1,7 @@
 // src/pages/PaymentSelectionPage.jsx
 import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
-import { Container, Box, Typography, Stack, Paper, Divider, Button } from '@mui/material';
+import { Container, Box, Typography, Stack, Paper, Divider, Button, Alert } from '@mui/material';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
 import PaymentsIcon from '@mui/icons-material/Payments';
@@ -16,55 +16,79 @@ import PrintCard from '../components/Blocks/PrintCard';
 import TrustBanner from '../components/Blocks/TrustBanner';
 import StickyActionDock from '../components/Blocks/StickyActionDock';
 import { getMerchantProfile, updatePrintJob, getActiveJobPins } from '../supabase/db';
+import { supabase } from '../supabase/client';
 import { formatOrderToken, generatePin } from '../utils/tokenGenerator';
-
-const DEFAULT_DEMO_MERCHANT = {
-  id: 'campus-library-04',
-  shopCode: 'QP-8421',
-  shopName: 'Campus Library Print Station',
-  pricePerPageBW: 2,
-  pricePerPageColor: 5,
-};
+import { recordShopVisit } from '../utils/recentShops';
 
 export default function PaymentSelectionPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const location = useLocation();
 
-  const rawMerchantId = searchParams.get('merchantId');
-  const merchantId = rawMerchantId || DEFAULT_DEMO_MERCHANT.id;
+  const merchantId = searchParams.get('merchantId');
   const incoming = location.state || {};
-  const activeJobId = searchParams.get('jobId') || incoming.jobId || `QP-${Math.floor(100000 + Math.random() * 900000)}`;
+  const activeJobId = searchParams.get('jobId') || incoming.jobId;
 
   const { isDark, colors } = useThemeMode();
 
-  const [merchantProfile, setMerchantProfile] = useState(DEFAULT_DEMO_MERCHANT);
+  const [merchantProfile, setMerchantProfile] = useState(incoming.merchantProfile || null);
   const [selectedMethod, setSelectedMethod] = useState('upi'); // 'upi' | 'cash'
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [copiedUpi, setCopiedUpi] = useState(false);
+  const [jobDetails, setJobDetails] = useState(null);
 
-  // Extract order properties
-  const filesList = incoming.files || [];
+  // Extract order properties from navigation state or loaded job
+  const filesList = incoming.files || jobDetails?.files || [];
   const primaryFileName = filesList.length > 0
     ? filesList[0]?.name + (filesList.length > 1 ? ` (+${filesList.length - 1} more)` : '')
-    : 'lecture_notes_final.pdf';
-  const totalPages = incoming.totalPagesCount || 14;
-  const bwPages = incoming.bwPagesCount ?? totalPages;
-  const colorPages = incoming.colorPagesCount ?? 0;
-  const totalCost = incoming.estimatedCost != null ? Number(incoming.estimatedCost).toFixed(2) : '28.00';
+    : (incoming.fileName || jobDetails?.files?.[0]?.name || 'Document');
+  const totalPages = incoming.totalPagesCount || jobDetails?.total_pages || jobDetails?.totalPages || 1;
+  const bwPages = incoming.bwPagesCount ?? (jobDetails?.bw_pages ?? totalPages);
+  const colorPages = incoming.colorPagesCount ?? (jobDetails?.color_pages ?? 0);
+  const totalCost = incoming.estimatedCost != null
+    ? Number(incoming.estimatedCost).toFixed(2)
+    : (jobDetails?.cost != null ? Number(jobDetails.cost).toFixed(2) : '0.00');
 
   useEffect(() => {
-    if (merchantId && merchantId !== 'campus-library-04') {
-      getMerchantProfile(merchantId)
-        .then((profile) => { if (profile) setMerchantProfile(profile); })
-        .catch(() => setMerchantProfile(DEFAULT_DEMO_MERCHANT));
-    }
+    if (!merchantId) return;
+
+    getMerchantProfile(merchantId)
+      .then((profile) => {
+        if (profile) {
+          setMerchantProfile(profile);
+          recordShopVisit({
+            id: profile.id || merchantId,
+            shopCode: profile.shopCode || profile.shop_code || null,
+            shopName: profile.shopName || profile.shop_name || 'Print Station',
+          });
+        }
+      })
+      .catch((err) => {
+        console.warn('[PaymentSelectionPage] Profile fetch note:', err);
+      });
   }, [merchantId]);
+
+  // If no incoming state, fetch job from Supabase by jobId
+  useEffect(() => {
+    if (!activeJobId || incoming.files) return;
+
+    supabase
+      .from('print_jobs')
+      .select('*')
+      .eq('id', activeJobId)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (!error && data) {
+          setJobDetails(data);
+        }
+      })
+      .catch(() => {});
+  }, [activeJobId, incoming.files]);
 
   const merchantUpiId = merchantProfile?.upiId || merchantProfile?.upi_id;
 
   const upiIntentUrl = useMemo(() => {
-    if (!merchantUpiId) return null;
+    if (!merchantUpiId || !activeJobId) return null;
     const params = new URLSearchParams({
       pa: merchantUpiId,
       pn: merchantProfile?.shopName || 'QuickPrint Station',
@@ -76,6 +100,11 @@ export default function PaymentSelectionPage() {
   }, [merchantUpiId, merchantProfile?.shopName, totalCost, activeJobId]);
 
   const handlePayAndProceed = async () => {
+    if (!merchantId || !activeJobId) {
+      navigate('/');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       // Query active queue to guarantee zero active-code overlap at this shop
@@ -93,8 +122,8 @@ export default function PaymentSelectionPage() {
         tokenNumber: tokenDisplay,
         pin,
         merchantId,
-        merchantName: merchantProfile.shopName,
-        shopCode: merchantProfile.shopCode,
+        merchantName: merchantProfile?.shopName || 'Print Station',
+        shopCode: merchantProfile?.shopCode || 'STATION',
         fileName: primaryFileName,
         pages: totalPages,
         rawPages: incoming.rawPagesCount || totalPages,
@@ -128,15 +157,17 @@ export default function PaymentSelectionPage() {
 
   return (
     <Box sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', bgcolor: isDark ? colors.bg : '#faf8ff' }}>
-      <AppHeader title="QuickPrint" subtitle="Payment" showBack backTo={`/print?merchantId=${merchantId}`} />
+      <AppHeader title="QuickPrint" subtitle="Payment" showBack backTo={merchantId ? `/print?merchantId=${merchantId}` : '/'} />
 
       <Container maxWidth="xs" sx={{ py: 3, flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
         {/* Shop Info Header */}
-        <ShopIdentityHeader
-          shopName={merchantProfile?.shopName}
-          shopCode={merchantProfile?.shopCode}
-          subtitle={`Counter Terminal • ${merchantProfile.shopCode || 'QP-8421'}`}
-        />
+        {merchantProfile && (
+          <ShopIdentityHeader
+            shopName={merchantProfile?.shopName || 'Print Station'}
+            shopCode={merchantProfile?.shopCode || 'STATION'}
+            subtitle={`Counter Terminal • ${merchantProfile.shopCode || ''}`}
+          />
+        )}
 
         {/* Order Summary Card */}
         <PrintCard title="Order Summary" subtitle={primaryFileName}>
@@ -325,7 +356,7 @@ export default function PaymentSelectionPage() {
         priceText={`₹${totalCost}`}
         primaryLabel={isSubmitting ? 'Confirming...' : (selectedMethod === 'upi' ? 'Confirm Payment & Get Token' : 'Get Pickup Token')}
         onPrimaryClick={handlePayAndProceed}
-        disabled={isSubmitting}
+        disabled={isSubmitting || !activeJobId}
         loading={isSubmitting}
       />
     </Box>

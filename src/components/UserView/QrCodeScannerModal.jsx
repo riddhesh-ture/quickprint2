@@ -13,14 +13,13 @@ import {
   Stack,
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
-import CameraAltIcon from '@mui/icons-material/CameraAlt';
 import QrCodeScannerIcon from '@mui/icons-material/QrCodeScanner';
 import { useThemeMode } from '../../context/ThemeContext';
 import { Html5Qrcode } from 'html5-qrcode';
 
 const READER_ELEMENT_ID = 'quickprint-qr-reader';
 
-export default function QrCodeScannerModal({ open, onClose, onScanSuccess, onSimulateScan }) {
+export default function QrCodeScannerModal({ open, onClose, onScanSuccess }) {
   const { isDark, colors } = useThemeMode();
   const [cameraLoading, setCameraLoading] = useState(true);
   const [cameraError, setCameraError] = useState(null);
@@ -150,15 +149,6 @@ export default function QrCodeScannerModal({ open, onClose, onScanSuccess, onSim
     onClose();
   };
 
-  const handleSimulate = async () => {
-    await stopScanner();
-    if (onSimulateScan) {
-      onSimulateScan();
-    } else {
-      onScanSuccess('QP-8421');
-    }
-  };
-
   return (
     <Dialog
       open={open}
@@ -247,36 +237,20 @@ export default function QrCodeScannerModal({ open, onClose, onScanSuccess, onSim
           />
         </Box>
 
-        <Stack spacing={1}>
-          <Button
-            variant="contained"
-            onClick={handleSimulate}
-            startIcon={<CameraAltIcon />}
-            sx={{
-              py: 1.2,
-              borderRadius: '12px',
-              textTransform: 'none',
-              fontWeight: 800,
-              bgcolor: colors.primary,
-              '&:hover': { bgcolor: colors.primaryHover },
-            }}
-          >
-            Simulate Counter QR Scan (QP-8421)
-          </Button>
-
+        <Box sx={{ mt: 1 }}>
           <Button
             variant="text"
             onClick={handleClose}
             sx={{
               textTransform: 'none',
-              fontWeight: 600,
-              color: colors.textSecondary,
-              fontSize: '0.85rem',
+              fontWeight: 700,
+              color: colors.primary,
+              fontSize: '0.9rem',
             }}
           >
             Enter 4-Digit Code Manually
           </Button>
-        </Stack>
+        </Box>
       </DialogContent>
     </Dialog>
   );

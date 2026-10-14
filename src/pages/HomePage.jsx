@@ -1,3 +1,4 @@
+// src/pages/HomePage.jsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -26,14 +27,6 @@ import PrivacyDialog from '../components/Blocks/PrivacyDialog';
 import HelpDialog from '../components/Blocks/HelpDialog';
 import { getSavedShops, removeSavedShop, recordShopVisit } from '../utils/recentShops';
 
-const DEFAULT_DEMO_SHOP = {
-  id: 'campus-library-04',
-  shopCode: 'QP-8421',
-  shopName: 'Campus Library Print Station',
-  locationDetails: 'Library Ground Floor, Printer #04',
-  isDemo: true,
-};
-
 export default function HomePage() {
   const navigate = useNavigate();
   const { isDark, colors } = useThemeMode();
@@ -52,13 +45,11 @@ export default function HomePage() {
 
   const handleSelectShop = (merchant) => {
     if (!merchant?.id) return;
-    if (!merchant.isDemo) {
-      recordShopVisit({
-        id: merchant.id,
-        shopCode: merchant.shopCode || merchant.shop_code || null,
-        shopName: merchant.shopName || merchant.shop_name || 'Print Shop',
-      });
-    }
+    recordShopVisit({
+      id: merchant.id,
+      shopCode: merchant.shopCode || merchant.shop_code || null,
+      shopName: merchant.shopName || merchant.shop_name || 'Print Station',
+    });
     navigate(`/print?merchantId=${merchant.id}`);
   };
 
@@ -100,12 +91,6 @@ export default function HomePage() {
       const { getMerchantByShopCodeOrId } = await import('../supabase/db');
       const clean = trimmed.replace(/\s+/g, '');
 
-      // Check if it's the demo station
-      if (clean === 'QP-8421' || clean === 'QP8421' || clean === '8421' || clean === 'CAMPUS-LIBRARY-04') {
-        handleSelectShop(DEFAULT_DEMO_SHOP);
-        return;
-      }
-
       let merchant = await getMerchantByShopCodeOrId(clean);
 
       if (!merchant && !clean.startsWith('QP-') && /^\d{4}$/.test(clean)) {
@@ -118,11 +103,7 @@ export default function HomePage() {
         setCodeError('Shop code not found. Please verify the 4-digit code.');
       }
     } catch {
-      if (trimmed.includes('8421') || trimmed.includes('DEMO')) {
-        handleSelectShop(DEFAULT_DEMO_SHOP);
-      } else {
-        setCodeError('Could not verify shop. Try again or scan QR.');
-      }
+      setCodeError('Could not verify shop. Try again or scan QR.');
     } finally {
       setCodeLoading(false);
     }
@@ -133,8 +114,6 @@ export default function HomePage() {
     const updated = removeSavedShop(shopId);
     setSavedShops(updated);
   };
-
-  const displayShops = savedShops.length > 0 ? savedShops : [DEFAULT_DEMO_SHOP];
 
   return (
     <Box sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', bgcolor: isDark ? colors.bg : '#faf8ff' }}>
@@ -226,66 +205,63 @@ export default function HomePage() {
           </Button>
         </PrintCard>
 
-        {/* 2. Recent / Demo Shops */}
-        <PrintCard
-          title="Recent Stations"
-          subtitle="1-tap reconnect to your frequent print spots"
-          action={<HistoryIcon sx={{ fontSize: 20, color: colors.textSecondary }} />}
-        >
-          <Stack spacing={1}>
-            {displayShops.map((shop) => (
-              <Box
-                key={shop.id}
-                onClick={() => handleSelectShop(shop)}
-                sx={{
-                  p: 1.5,
-                  borderRadius: '12px',
-                  bgcolor: isDark ? 'rgba(255,255,255,0.04)' : '#f8faff',
-                  border: `1px solid ${colors.border}`,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  cursor: 'pointer',
-                  '&:hover': { bgcolor: isDark ? 'rgba(255,255,255,0.08)' : '#eff6ff' },
-                }}
-              >
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, minWidth: 0 }}>
-                  <StorefrontIcon sx={{ color: colors.primary, fontSize: 20 }} />
-                  <Box sx={{ minWidth: 0 }}>
-                    <Typography variant="subtitle2" noWrap sx={{ fontWeight: 700, color: colors.text }}>
-                      {shop.shopName || 'Campus Library Print Station'}
-                    </Typography>
-                    <Typography variant="caption" sx={{ color: colors.textSecondary }}>
-                      {shop.shopCode || 'QP-8421'} {shop.isDemo ? '• Demo Station' : ''}
-                    </Typography>
+        {/* 2. Recent Stations (only rendered when user has saved / visited stations) */}
+        {savedShops.length > 0 && (
+          <PrintCard
+            title="Recent Stations"
+            subtitle="1-tap reconnect to your frequent print spots"
+            action={<HistoryIcon sx={{ fontSize: 20, color: colors.textSecondary }} />}
+          >
+            <Stack spacing={1}>
+              {savedShops.map((shop) => (
+                <Box
+                  key={shop.id}
+                  onClick={() => handleSelectShop(shop)}
+                  sx={{
+                    p: 1.5,
+                    borderRadius: '12px',
+                    bgcolor: isDark ? 'rgba(255,255,255,0.04)' : '#f8faff',
+                    border: `1px solid ${colors.border}`,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    cursor: 'pointer',
+                    transition: 'background-color 0.15s ease',
+                    '&:hover': { bgcolor: isDark ? 'rgba(255,255,255,0.08)' : '#eff6ff' },
+                  }}
+                >
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, minWidth: 0 }}>
+                    <StorefrontIcon sx={{ color: colors.primary, fontSize: 20 }} />
+                    <Box sx={{ minWidth: 0 }}>
+                      <Typography variant="subtitle2" noWrap sx={{ fontWeight: 700, color: colors.text }}>
+                        {shop.shopName || 'Print Station'}
+                      </Typography>
+                      <Typography variant="caption" sx={{ color: colors.textSecondary }}>
+                        {shop.shopCode || ''}
+                      </Typography>
+                    </Box>
                   </Box>
-                </Box>
 
-                {!shop.isDemo && (
                   <IconButton size="small" onClick={(e) => handleRemoveSaved(e, shop.id)} sx={{ color: colors.textSecondary }}>
                     <DeleteOutlineIcon sx={{ fontSize: 18 }} />
                   </IconButton>
-                )}
-              </Box>
-            ))}
-          </Stack>
-        </PrintCard>
+                </Box>
+              ))}
+            </Stack>
+          </PrintCard>
+        )}
 
         {/* 3. Trust Banner */}
         <TrustBanner onLearnMore={() => setPrivacyOpen(true)} />
       </Container>
 
-      {/* Real Camera QR Scanner Modal with Fallback */}
+      {/* Real Camera QR Scanner Modal */}
       <QrCodeScannerModal
         open={scannerOpen}
         onClose={() => setScannerOpen(false)}
         onScanSuccess={(decodedText) => {
           setScannerOpen(false);
           handleResolveCode(decodedText);
-        }}
-        onSimulateScan={() => {
-          setScannerOpen(false);
-          handleSelectShop(DEFAULT_DEMO_SHOP);
         }}
       />
 
