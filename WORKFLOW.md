@@ -24,9 +24,10 @@ A zero-login walk-in kiosk service connecting customers to print stations with d
 * **Verbal Prompt**: *"Tell the attendant: 8421 or show this screen."*
 * **Realtime Listener**: Listens via Supabase CDC for instant in-place status flip.
 
-## 5. Merchant Station & Print Execution (`/merchant/dashboard`)
-* **Incoming Queue**: Job appears with `#<pin>`, file specs, billable pages, and amount.
-* **Accept & Print**: Merchant clicks print. Pre-opened window bypasses browser popup blockers and prints document.
+## 5. Merchant Station & Prepress Studio (`/merchant/dashboard`)
+* **Incoming Queue**: Job appears with `#<pin>`, file specs, billable pages, and amount in a single active queue.
+* **Prepress Studio & Inspection**: Merchant clicks "Edit & View" to inspect documents with zero latency (native PDF preview, image orientation, page range extraction, high-contrast Xerox mode, and real-time cost calculation).
+* **Silent Print Transition**: Clicking "Print" or "Save & Ready for Print" updates status to `printed` without intrusive browser `window.print()` dialogs, ready for local Node print server spooling.
 * **Memory Safety**: Chunks stored in merchant browser IndexedDB are purged immediately on job completion.
 
 ## 6. Payment & Atomic Completion

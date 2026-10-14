@@ -44,7 +44,7 @@ export function formatFileSize(bytes) {
  * @param {boolean} duplex
  * @returns {number} Number of billable pages/sheets selected
  */
-export function calculateBillablePages(totalDocumentPages = 1, pagesSpec = '', duplex = false) {
+export function calculateBillablePages(totalDocumentPages = 1, pagesSpec = '', duplex = false, pagesPerSheet = 1) {
   let pages = Math.max(1, totalDocumentPages || 1);
 
   if (pagesSpec && typeof pagesSpec === 'string' && pagesSpec.trim() !== '' && pagesSpec.trim().toLowerCase() !== 'all') {
@@ -75,10 +75,13 @@ export function calculateBillablePages(totalDocumentPages = 1, pagesSpec = '', d
     pages = selectedPages.size > 0 ? selectedPages.size : Math.max(1, totalDocumentPages || 1);
   }
 
+  const nUp = Math.max(1, parseInt(pagesPerSheet, 10) || 1);
+  const physicalSheets = Math.ceil(pages / nUp);
+
   if (duplex) {
-    return Math.ceil(pages / 2);
+    return Math.ceil(physicalSheets / 2);
   }
-  return pages;
+  return physicalSheets;
 }
 
 /**

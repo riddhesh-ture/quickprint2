@@ -136,7 +136,11 @@ function getAfterPrintScript(blobUrl, printId) {
 
 function monitorPrintCompletion({ targetWin, blobUrl, printId, iframeElem, resolve }) {
   const cleanup = () => {
-    try { URL.revokeObjectURL(blobUrl); } catch (_) {}
+    try {
+      URL.revokeObjectURL(blobUrl);
+    } catch (_err) {
+      // Ignored if already revoked
+    }
     if (iframeElem && iframeElem.parentNode) {
       iframeElem.parentNode.removeChild(iframeElem);
     }

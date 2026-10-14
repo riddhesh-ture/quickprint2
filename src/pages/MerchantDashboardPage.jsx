@@ -23,6 +23,7 @@ import { useAuth } from '../hooks/useAuth';
 import { useCollection } from '../hooks/useSupabase';
 import { useMerchantRelay, playChime } from '../hooks/useMerchantRelay';
 import { usePrintJobManager } from '../hooks/usePrintJobManager';
+import { cleanupStaleJobBlobs } from '../utils/localJobStorage';
 
 import RefreshIcon from '@mui/icons-material/Refresh';
 import HistoryIcon from '@mui/icons-material/History';
@@ -38,7 +39,11 @@ export default function MerchantDashboardPage() {
   const [editingDoc, setEditingDoc] = useState(null); // { job, fileIndex }
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'info' });
 
-  // Guard merchant authentication
+  // Guard merchant authentication & purge stale local blobs older than 24h
+  useEffect(() => {
+    cleanupStaleJobBlobs().catch(() => {});
+  }, []);
+
   useEffect(() => {
     if (!loading && userData && userData.role !== 'merchant') {
       navigate('/', { replace: true });

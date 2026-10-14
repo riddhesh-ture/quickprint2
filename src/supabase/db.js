@@ -260,7 +260,9 @@ export const incrementMerchantStats = async (merchantId, pages = 0, earnings = 0
       p_earnings: Number(earnings) || 0,
     });
     if (!error) return;
-  } catch {}
+  } catch (_err) {
+    // RPC increment not available, proceed to direct update fallback
+  }
 
   // Fallback if RPC is not installed: fetch and update stats directly
   try {
@@ -318,7 +320,9 @@ export const completePrintJob = async (jobId, merchantId) => {
       p_merchant_id: merchantId,
     });
     if (!error) return true;
-  } catch {}
+  } catch (_err) {
+    // RPC fallback to direct update
+  }
 
   return updatePrintJob(jobId, { status: 'completed', completedAt: new Date().toISOString() });
 };

@@ -1,9 +1,10 @@
 // src/pages/UserPrintPage.jsx
 import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { Container, Box, Typography, Stack, IconButton, Alert, ToggleButtonGroup, ToggleButton } from '@mui/material';
+import { Container, Box, Typography, Stack, IconButton, Alert, ToggleButtonGroup, ToggleButton, Button } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import RemoveIcon from '@mui/icons-material/Remove';
+import QrCodeScannerIcon from '@mui/icons-material/QrCodeScanner';
 import { useThemeMode } from '../context/ThemeContext';
 import AppHeader from '../components/Blocks/AppHeader';
 import ShopIdentityHeader from '../components/Blocks/ShopIdentityHeader';
@@ -16,25 +17,18 @@ import { getMerchantProfile, generatePrintJobId, createPrintJob, getActiveJobPin
 import { generatePin, formatOrderToken } from '../utils/tokenGenerator';
 import { realtimeRelay } from '../utils/realtimeRelay';
 import { inspectPdfFile, calculateBillablePages } from '../utils/fileValidation';
-
-const DEFAULT_DEMO_MERCHANT = {
-  id: 'campus-library-04',
-  shopCode: 'QP-8421',
-  shopName: 'Campus Library Print Station',
-  pricePerPageBW: 2,
-  pricePerPageColor: 5,
-};
+import { recordShopVisit } from '../utils/recentShops';
 
 export default function UserPrintPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const rawMerchantId = searchParams.get('merchantId');
-  const merchantId = rawMerchantId || DEFAULT_DEMO_MERCHANT.id;
+  const merchantId = searchParams.get('merchantId');
 
   const { isDark, colors } = useThemeMode();
 
   // State
-  const [merchantProfile, setMerchantProfile] = useState(DEFAULT_DEMO_MERCHANT);
+  const [merchantProfile, setMerchantProfile] = useState(null);
+  const [isStationLoading, setIsStationLoading] = useState(Boolean(merchantId));
   const [isMerchantOnline, setIsMerchantOnline] = useState(false);
   const [files, setFiles] = useState([]);
   const [colorMode, setColorMode] = useState('bw'); // 'bw' | 'color'
@@ -43,24 +37,55 @@ export default function UserPrintPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(null);
 
-  // Fetch Merchant info and monitor station real-time presence
+  // Fetch Merchant info, record recent shop visit, and monitor station presence
   useEffect(() => {
-    if (merchantId && merchantId !== 'campus-library-04') {
-      getMerchantProfile(merchantId)
-        .then((profile) => { if (profile) setMerchantProfile(profile); })
-        .catch(() => setMerchantProfile(DEFAULT_DEMO_MERCHANT));
+    if (!merchantId) {
+      setIsStationLoading(false);
+      return;
     }
 
-    // Connect customer to relay room early to pre-warm connection & track presence
-    if (merchantId) {
-      realtimeRelay.connect(merchantId, 'customer');
-      const unsubscribe = realtimeRelay.subscribe((event) => {
-        if (event.type === 'presence') {
-          setIsMerchantOnline(Boolean(event.online));
+    setIsStationLoading(true);
+    getMerchantProfile(merchantId)
+      .then((profile) => {
+        if (profile) {
+          setMerchantProfile(profile);
+          recordShopVisit({
+            id: profile.id || merchantId,
+            shopCode: profile.shopCode || profile.shop_code || null,
+            shopName: profile.shopName || profile.shop_name || 'Print Station',
+          });
+        } else {
+          setMerchantProfile({
+            id: merchantId,
+            shopCode: 'STATION',
+            shopName: 'QuickPrint Station',
+            pricePerPageBW: 2,
+            pricePerPageColor: 5,
+          });
         }
+      })
+      .catch((err) => {
+        console.warn('[UserPrintPage] Profile fetch note:', err);
+        setMerchantProfile({
+          id: merchantId,
+          shopCode: 'STATION',
+          shopName: 'QuickPrint Station',
+          pricePerPageBW: 2,
+          pricePerPageColor: 5,
+        });
+      })
+      .finally(() => {
+        setIsStationLoading(false);
       });
-      return () => unsubscribe();
-    }
+
+    // Connect customer to relay room to track live station presence
+    realtimeRelay.connect(merchantId, 'customer');
+    const unsubscribe = realtimeRelay.subscribe((event) => {
+      if (event.type === 'presence') {
+        setIsMerchantOnline(Boolean(event.online));
+      }
+    });
+    return () => unsubscribe();
   }, [merchantId]);
 
   // Handle adding new files with asynchronous page counting & validation
@@ -144,8 +169,13 @@ export default function UserPrintPage() {
 
   // Submission Flow (Direct Transfer + DB metadata)
   const handlePrintSubmission = async () => {
+    if (!merchantId) {
+      setSubmitError('No print station selected. Please scan a counter QR code.');
+      return;
+    }
+
     if (files.length === 0) {
-      setSubmitError('Please upload at least one document to print.');
+      setSubmitError('Please select at least one document to print.');
       return;
     }
 
@@ -198,7 +228,7 @@ export default function UserPrintPage() {
       // Save metadata to database
       const jobData = {
         merchantId,
-        merchantName: merchantProfile.shopName,
+        merchantName: merchantProfile?.shopName || 'Print Station',
         pin,
         tokenNumber,
         files: filesForJob,
@@ -213,7 +243,6 @@ export default function UserPrintPage() {
 
       try {
         await createPrintJob(newJobId, jobData);
-        // Alert merchant station in real time
         realtimeRelay.sendJobComplete(newJobId, jobData);
       } catch (dbErr) {
         console.warn('[UserPrintPage] DB registration note:', dbErr);
@@ -264,23 +293,39 @@ export default function UserPrintPage() {
       alignItems: 'center',
       justifyContent: 'center',
       gap: 0.75,
+      transition: 'all 0.15s ease',
+      '&:hover': {
+        bgcolor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.65)',
+        color: colors.text,
+      },
       '&.Mui-selected': {
         bgcolor: isDark ? colors.primary : '#ffffff',
         color: isDark ? '#ffffff' : colors.primary,
-        boxShadow: isDark ? '0 1px 3px rgba(0,0,0,0.3)' : '0 1px 3px rgba(15,23,42,0.08)',
+        boxShadow: isDark ? '0 1px 3px rgba(0,0,0,0.3)' : '0 1px 4px rgba(15,23,42,0.08)',
+        '&:hover': {
+          bgcolor: isDark ? colors.primary : '#ffffff',
+          color: isDark ? '#ffffff' : colors.primary,
+        },
       },
     },
   };
 
   const pricePillSx = (isSelected) => ({
-    px: 0.8,
-    py: 0.15,
+    px: 0.85,
+    py: 0.2,
     borderRadius: '999px',
     bgcolor: isSelected
-      ? (isDark ? 'rgba(255,255,255,0.2)' : 'rgba(37,99,235,0.1)')
-      : (isDark ? 'rgba(255,255,255,0.08)' : '#e2e8f0'),
-    fontSize: '10.5px',
+      ? (isDark ? 'rgba(255, 255, 255, 0.22)' : 'rgba(37, 99, 235, 0.12)')
+      : (isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(15, 23, 42, 0.06)'),
+    color: isSelected
+      ? (isDark ? '#ffffff' : colors.primary)
+      : colors.textSecondary,
+    border: `1px solid ${isSelected
+      ? (isDark ? 'rgba(255, 255, 255, 0.25)' : 'rgba(37, 99, 235, 0.2)')
+      : (isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(15, 23, 42, 0.08)')}`,
+    fontSize: '11px',
     fontWeight: 700,
+    transition: 'all 0.15s ease',
   });
 
   return (
@@ -288,14 +333,45 @@ export default function UserPrintPage() {
       <AppHeader title="Print Documents" showBack backTo="/" />
 
       <Container maxWidth="xs" sx={{ py: 3, flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
+        {/* Missing Station Warning */}
+        {!merchantId && !isStationLoading && (
+          <PrintCard
+            title="No Print Station Selected"
+            subtitle="Connect to a station to configure printing"
+            elevation
+            sx={{ textAlign: 'center' }}
+          >
+            <Typography variant="body2" sx={{ color: colors.textSecondary, mb: 2 }}>
+              Scan the counter QR code at your print station or enter the 4-digit code to begin.
+            </Typography>
+            <Button
+              variant="contained"
+              fullWidth
+              startIcon={<QrCodeScannerIcon />}
+              onClick={() => navigate('/')}
+              sx={{
+                bgcolor: colors.primary,
+                py: 1.25,
+                borderRadius: '12px',
+                fontWeight: 800,
+                textTransform: 'none',
+              }}
+            >
+              Scan Station QR
+            </Button>
+          </PrintCard>
+        )}
+
         {/* Shop Header */}
-        <ShopIdentityHeader
-          shopName={merchantProfile?.shopName}
-          shopCode={merchantProfile?.shopCode}
-          isOnline={isMerchantOnline}
-          pricePerPageBW={priceBW}
-          pricePerPageColor={priceColor}
-        />
+        {merchantId && (
+          <ShopIdentityHeader
+            shopName={merchantProfile?.shopName || 'Print Station'}
+            shopCode={merchantProfile?.shopCode || 'STATION'}
+            isOnline={isMerchantOnline}
+            pricePerPageBW={priceBW}
+            pricePerPageColor={priceColor}
+          />
+        )}
 
         {submitError && (
           <Alert severity="error" onClose={() => setSubmitError(null)} sx={{ borderRadius: '12px' }}>
@@ -303,7 +379,7 @@ export default function UserPrintPage() {
           </Alert>
         )}
 
-        {/* File Dropzone */}
+        {/* Mobile-First File Uploader */}
         <FileUploader onFilesAdded={handleFilesAdded} hasFiles={files.length > 0} />
 
         {/* Uploaded Documents List */}
