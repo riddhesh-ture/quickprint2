@@ -153,7 +153,7 @@ export default function OrderReceiptPendingPage() {
   if (isLoading) {
     return (
       <Box sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', bgcolor: isDark ? colors.bg : '#faf8ff' }}>
-        <AppHeader title="QuickPrint" subtitle="Receipt" showBack backTo="/" />
+        <AppHeader showBack backTo="/" />
         <Container maxWidth="xs" sx={{ py: 6, flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2 }}>
           <CircularProgress size={36} sx={{ color: colors.primary }} />
           <Typography variant="body2" sx={{ color: colors.textSecondary }}>
@@ -167,7 +167,7 @@ export default function OrderReceiptPendingPage() {
   if (!activeOrder) {
     return (
       <Box sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', bgcolor: isDark ? colors.bg : '#faf8ff' }}>
-        <AppHeader title="QuickPrint" subtitle="Receipt" showBack backTo="/" />
+        <AppHeader showBack backTo="/" />
         <Container maxWidth="xs" sx={{ py: 4, flex: 1, display: 'flex', flexDirection: 'column', gap: 2.5 }}>
           <PrintCard title="No Order Found" subtitle="Could not locate active print receipt" elevation sx={{ textAlign: 'center', py: 3 }}>
             <Typography variant="body2" sx={{ color: colors.textSecondary, mb: 2 }}>
@@ -201,7 +201,7 @@ export default function OrderReceiptPendingPage() {
 
   return (
     <Box sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', bgcolor: isDark ? colors.bg : '#faf8ff' }}>
-      <AppHeader title="QuickPrint" subtitle="Receipt" showBack backTo="/" />
+      <AppHeader showBack backTo="/" />
 
       <Container maxWidth="xs" sx={{ py: 3, flex: 1, display: 'flex', flexDirection: 'column', gap: 2.25 }}>
         {/* 1. Realtime Status Banner (In-place Green Flip) */}

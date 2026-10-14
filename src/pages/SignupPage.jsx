@@ -22,6 +22,7 @@ import StorefrontIcon from '@mui/icons-material/Storefront';
 import PersonIcon from '@mui/icons-material/Person';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
 import PaymentIcon from '@mui/icons-material/Payment';
+import AppHeader from '../components/Blocks/AppHeader';
 import {
   signUpMerchant,
   signInWithGoogleMerchant,
@@ -570,8 +571,10 @@ export default function SignupPage() {
   };
 
   return (
-    <Container maxWidth="sm" sx={{ mt: 4, mb: 4 }}>
-      <Paper elevation={3} sx={{ p: 4 }}>
+    <Box sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+      <AppHeader isMerchant />
+      <Container maxWidth="sm" sx={{ mt: 3, mb: 4, flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+        <Paper elevation={3} sx={{ p: 4, borderRadius: '16px' }}>
         <Box sx={{ textAlign: 'center', mb: 3 }}>
           <StorefrontIcon sx={{ fontSize: 50, color: 'primary.main' }} />
           <Typography variant="h4" component="h1" gutterBottom fontWeight="bold">
@@ -650,5 +653,6 @@ export default function SignupPage() {
         </Typography>
       </Paper>
     </Container>
+    </Box>
   );
 }

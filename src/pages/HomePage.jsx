@@ -117,7 +117,7 @@ export default function HomePage() {
 
   return (
     <Box sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', bgcolor: isDark ? colors.bg : '#faf8ff' }}>
-      <AppHeader title="QuickPrint" subtitle="Fast & Private Printing" />
+      <AppHeader />
 
       <Container maxWidth="xs" sx={{ py: 3, flex: 1, display: 'flex', flexDirection: 'column', gap: 2.5 }}>
         {/* 1. Hero Hub Card: Enter Shop Code or Scan QR */}
