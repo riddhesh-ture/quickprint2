@@ -13,6 +13,7 @@ import {
   CircularProgress,
   Divider,
 } from '@mui/material';
+import AppHeader from '../components/Blocks/AppHeader';
 import { signInMerchant, signInWithGoogleMerchant } from '../firebase/auth';
 import { useAuth } from '../hooks/useAuth';
 
@@ -114,8 +115,10 @@ export default function LoginPage() {
   };
 
   return (
-    <Container component="main" maxWidth="xs" sx={{ mt: 8 }}>
-      <Paper elevation={3} sx={{ p: 4, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+    <Box sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+      <AppHeader isMerchant />
+      <Container component="main" maxWidth="xs" sx={{ mt: 4, mb: 4, flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+        <Paper elevation={3} sx={{ p: 4, display: 'flex', flexDirection: 'column', alignItems: 'center', borderRadius: '16px' }}>
         <Typography component="h1" variant="h5" fontWeight="bold" sx={{ mb: 1 }}>
           Merchant Login
         </Typography>
@@ -242,5 +245,6 @@ export default function LoginPage() {
         </Box>
       </Paper>
     </Container>
+    </Box>
   );
 }

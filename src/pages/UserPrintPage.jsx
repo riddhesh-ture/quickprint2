@@ -330,7 +330,7 @@ export default function UserPrintPage() {
 
   return (
     <Box sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', bgcolor: isDark ? colors.bg : '#faf8ff' }}>
-      <AppHeader title="Print Documents" showBack backTo="/" />
+      <AppHeader showBack backTo="/" />
 
       <Container maxWidth="xs" sx={{ py: 3, flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
         {/* Missing Station Warning */}

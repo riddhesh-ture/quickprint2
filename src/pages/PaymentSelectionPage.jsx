@@ -157,7 +157,7 @@ export default function PaymentSelectionPage() {
 
   return (
     <Box sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', bgcolor: isDark ? colors.bg : '#faf8ff' }}>
-      <AppHeader title="QuickPrint" subtitle="Payment" showBack backTo={merchantId ? `/print?merchantId=${merchantId}` : '/'} />
+      <AppHeader showBack backTo={merchantId ? `/print?merchantId=${merchantId}` : '/'} />
 
       <Container maxWidth="xs" sx={{ py: 3, flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
         {/* Shop Info Header */}
