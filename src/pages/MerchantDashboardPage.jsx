@@ -12,6 +12,8 @@ import {
   Tooltip,
   Snackbar,
   Stack,
+  useTheme,
+  useMediaQuery,
 } from '@mui/material';
 import { useNavigate, useOutletContext } from 'react-router-dom';
 import MerchantQueueList from '../components/MerchantView/MerchantQueueList';
@@ -34,6 +36,8 @@ export default function MerchantDashboardPage() {
   const { user, userData, loading } = useAuth();
   const navigate = useNavigate();
   const outletCtx = useOutletContext();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
   const [historyOpen, setHistoryOpen] = useState(false);
   const [editingDoc, setEditingDoc] = useState(null); // { job, fileIndex }
@@ -164,7 +168,7 @@ export default function MerchantDashboardPage() {
   if (userData.role !== 'merchant') return null;
 
   return (
-    <Container maxWidth="xl" sx={{ mt: 3, mb: 4 }}>
+    <Container maxWidth="xl" sx={{ mt: { xs: 2, sm: 3 }, mb: 4, px: { xs: 1.5, sm: 3 } }}>
       {/* Top Header Bar */}
       <Box
         sx={{
@@ -177,10 +181,15 @@ export default function MerchantDashboardPage() {
         }}
       >
         <Box>
-          <Typography variant="h4" fontWeight={800} letterSpacing="-0.02em">
+          <Typography
+            variant="h4"
+            fontWeight={800}
+            letterSpacing="-0.02em"
+            sx={{ fontSize: { xs: '1.5rem', sm: '2.125rem' } }}
+          >
             Print Queue
           </Typography>
-          <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center', mt: 0.5 }}>
+          <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center', mt: 0.5, flexWrap: 'wrap', gap: 1 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
               <SecurityIcon sx={{ fontSize: 15, color: 'success.main' }} />
               <Typography variant="caption" color="text.secondary">
@@ -235,7 +244,11 @@ export default function MerchantDashboardPage() {
         onPrint={handlePrint}
         onDone={handleDone}
         onDelete={handleDelete}
-        onEdit={(job, fileIndex = 0) => setEditingDoc({ job, fileIndex })}
+        onEdit={(job, fileIndex = 0) => {
+          if (!isMobile) {
+            setEditingDoc({ job, fileIndex });
+          }
+        }}
         processingJobId={processingJobId}
         isLoading={!jobs}
       />
@@ -249,9 +262,9 @@ export default function MerchantDashboardPage() {
         onDelete={handleDelete}
       />
 
-      {/* Document Editor Studio Modal */}
+      {/* Document Editor Studio Modal - Desktop Only */}
       <DocumentEditorModal
-        open={Boolean(editingDoc)}
+        open={!isMobile && Boolean(editingDoc)}
         onClose={() => setEditingDoc(null)}
         job={editingDoc?.job}
         fileIndex={editingDoc?.fileIndex || 0}
