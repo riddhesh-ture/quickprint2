@@ -23,7 +23,12 @@ export function QuickStatCard({ title, value, icon, color = 'primary', subtitle 
             <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 700 }}>
               {title}
             </Typography>
-            <Typography variant="h5" fontWeight={800} color={`${color}.main`} sx={{ mt: 0.25 }}>
+            <Typography
+              variant="h5"
+              fontWeight={800}
+              color={`${color}.main`}
+              sx={{ mt: 0.25, fontSize: { xs: '1.25rem', sm: '1.5rem' } }}
+            >
               {value}
             </Typography>
             {subtitle && (

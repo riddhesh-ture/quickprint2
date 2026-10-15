@@ -6,7 +6,9 @@ import {
   deleteJobBlobs,
   saveEditedJobBlob,
   revertJobBlob,
+  getJobBlob,
 } from '../utils/localJobStorage';
+import { securePrint } from '../utils/securePrint';
 
 export function usePrintJobManager(merchantId, merchantName, pricePerPageBW = 2, pricePerPageColor = 5) {
   const [processingJobId, setProcessingJobId] = useState(null);
@@ -43,7 +45,30 @@ export function usePrintJobManager(merchantId, merchantName, pricePerPageBW = 2,
     }
 
     try {
-      // Mark job as printed (ready for counter pickup / local print server)
+      // Direct system print: open browser/OS print dialogue for the files
+      for (let i = 0; i < job.files.length; i++) {
+        const file = job.files[i];
+        setPrintProgress({
+          current: i + 1,
+          total: job.files.length,
+          fileName: file.name || `Document ${i + 1}`,
+          status: 'Opening system print dialog...',
+        });
+
+        let blob = await getJobBlob(job.id, i);
+        if (!blob && file.blob instanceof Blob) blob = file.blob;
+        if (!blob && file.file instanceof Blob) blob = file.file;
+
+        if (blob) {
+          try {
+            await securePrint(blob, file.name || 'document', file.specs || {}, merchantName);
+          } catch (printErr) {
+            console.warn('System print invocation note:', printErr);
+          }
+        }
+      }
+
+      // Mark job as printed (ready for counter pickup / completed print spool)
       await updatePrintJob(job.id, {
         status: 'printed',
         cost: totalCost,
@@ -63,14 +88,14 @@ export function usePrintJobManager(merchantId, merchantName, pricePerPageBW = 2,
     } catch (err) {
       console.error('Error updating print status:', err);
       setActionNotice({
-        message: `Failed to mark as printed: ${err.message}`,
+        message: `Failed to print order: ${err.message}`,
         severity: 'error',
       });
     } finally {
       setProcessingJobId(null);
       setPrintProgress({ current: 0, total: 0, fileName: '', status: '' });
     }
-  }, [pricePerPageBW, pricePerPageColor]);
+  }, [pricePerPageBW, pricePerPageColor, merchantName]);
 
   const handleDone = useCallback(async (job) => {
     if (!job) return;
