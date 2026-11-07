@@ -83,12 +83,12 @@ export default function ManualDuplexModal({
             }}
           >
             <Typography variant="subtitle2" fontWeight={700} gutterBottom>
-              Instructions for Single-Sided Printer (e.g. Canon G3030 / G3730):
+              Instructions for Single-Sided Counter Printers:
             </Typography>
             <Typography variant="body2" component="div" sx={{ lineHeight: 1.7, color: 'text.primary' }}>
               1. Take the printed stack of paper directly from the printer's output tray.<br />
-              2. <strong>Flip the sheets over</strong> so the blank sides will be printed.<br />
-              3. <strong>Place the stack back into the paper feeder / tray</strong> in the same orientation.<br />
+              2. <strong>Turn the stack over</strong> so the unprinted blank sides will face the print head.<br />
+              3. <strong>Place the stack back into the paper feeder / input tray</strong> in the same orientation.<br />
               4. Click the button below to print the even pages on the reverse side.
             </Typography>
           </Box>

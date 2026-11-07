@@ -190,8 +190,8 @@ function monitorPrintCompletion({ targetWin, blobUrl, printId, iframeElem, resol
     }
   }
 
-  // Safety timeout fallback if browser does not fire afterprint
-  setTimeout(finish, 45000);
+  // Safety timeout fallback if browser does not fire afterprint (e.g. mobile or sandboxed iframes)
+  setTimeout(finish, 3000);
 }
 
 /**

@@ -26,9 +26,13 @@ import {
   sendSilentPrintJob,
   DAEMON_BASE_URL,
 } from '../utils/printDaemonClient';
+import { generateTestSlipPdf } from '../utils/testSlipGenerator';
+import { securePrint } from '../utils/securePrint';
 
 export default function MerchantSettingsPage() {
   const { user, userData, loading } = useAuth();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
   const [validationError, setValidationError] = useState(null);
@@ -100,23 +104,33 @@ export default function MerchantSettingsPage() {
     setTestPrinting(true);
     setTestPrintStatus(null);
     try {
-      // 1-page completely blank white PDF page (standard A4 size 595 x 842 points)
-      const blankWhitePdf = '%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] >>\nendobj\nxref\n0 4\n0000000000 65535 f \n0000000009 00000 n \n0000000058 00000 n \n0000000115 00000 n \ntrailer\n<< /Size 4 /Root 1 0 R >>\nstartxref\n197\n%%EOF';
-      const testBlob = new Blob([blankWhitePdf], { type: 'application/pdf' });
-
-      await sendSilentPrintJob({
-        jobId: 'test_slip_' + Date.now(),
-        token: 'TEST',
-        fileBlob: testBlob,
-        fileName: 'blank_test_page.pdf',
-        specs: { copies: 1, duplex: false, color: 'bw' },
-        printerName: selectedPrinter || undefined,
+      const testBlob = await generateTestSlipPdf({
+        shopName: userData?.shopName || formData?.shopName || 'QuickPrint Counter',
+        printerName: selectedPrinter || 'Default System Printer',
       });
 
-      setTestPrintStatus({
-        type: 'success',
-        message: `Blank test page sent to "${selectedPrinter || 'default printer'}"!`,
-      });
+      if (daemonOnline) {
+        await sendSilentPrintJob({
+          jobId: 'test_slip_' + Date.now(),
+          token: 'TEST',
+          fileBlob: testBlob,
+          fileName: 'QuickPrint_Test_Slip.pdf',
+          specs: { copies: 1, duplex: false, color: 'color' },
+          printerName: selectedPrinter || undefined,
+        });
+
+        setTestPrintStatus({
+          type: 'success',
+          message: `Diagnostic test slip sent to "${selectedPrinter || 'default printer'}"!`,
+        });
+      } else {
+        // Fallback to browser print if local daemon is not running (e.g. mobile device)
+        await securePrint(testBlob, 'QuickPrint_Test_Slip.pdf', { copies: 1, color: 'color' }, formData.shopName || 'QuickPrint');
+        setTestPrintStatus({
+          type: 'success',
+          message: 'Diagnostic test slip opened in system print dialog.',
+        });
+      }
     } catch (err) {
       setTestPrintStatus({
         type: 'error',
@@ -506,31 +520,71 @@ export default function MerchantSettingsPage() {
                   </Alert>
                 )}
               </Box>
-            ) : (
-              <Alert severity="info" variant="outlined" sx={{ borderRadius: 2 }}>
-                <Typography variant="subtitle2" fontWeight={700} gutterBottom>
-                  How to start the Local Print Daemon:
-                </Typography>
-                <Typography variant="body2" sx={{ mb: 1 }}>
-                  Open a terminal in the QuickPrint directory on this workstation and run:
-                </Typography>
-                <Box
-                  sx={{
-                    bgcolor: 'action.hover',
-                    p: 1.5,
-                    borderRadius: 1,
-                    fontFamily: 'monospace',
-                    fontSize: '0.875rem',
-                    fontWeight: 600,
-                    mb: 1,
-                  }}
-                >
-                  npm run daemon
+            ) : isMobile ? (
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <Alert severity="info" sx={{ borderRadius: 2 }}>
+                  <Typography variant="subtitle2" fontWeight={700} gutterBottom>
+                    Mobile Printing Active
+                  </Typography>
+                  <Typography variant="body2">
+                    Prints are sent directly to your phone's native Android/iOS print dialog with automatic odd/even page splitting for manual duplexing. No desktop daemon needed!
+                  </Typography>
+                </Alert>
+
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
+                  <Button
+                    variant="outlined"
+                    startIcon={testPrinting ? <CircularProgress size={16} /> : <PrintIcon />}
+                    onClick={handleTestPrint}
+                    disabled={testPrinting}
+                  >
+                    {testPrinting ? 'Opening Test...' : 'Test Mobile Print'}
+                  </Button>
+                  <Typography variant="caption" color="text.secondary">
+                    Opens the universal diagnostic test slip in your phone's native print spooler.
+                  </Typography>
                 </Box>
-                <Typography variant="caption" color="text.secondary">
-                  While offline, QuickPrint automatically falls back to standard browser printing (securePrint iframe).
-                </Typography>
-              </Alert>
+
+                {testPrintStatus && (
+                  <Alert severity={testPrintStatus.type} sx={{ mt: 1 }}>
+                    {testPrintStatus.message}
+                  </Alert>
+                )}
+              </Box>
+            ) : (
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <Alert severity="info" variant="outlined" sx={{ borderRadius: 2 }}>
+                  <Typography variant="subtitle2" fontWeight={700} gutterBottom>
+                    Standalone QuickPrint Daemon (.exe):
+                  </Typography>
+                  <Typography variant="body2" sx={{ mb: 1 }}>
+                    Run <strong>quickprint.exe</strong> on this workstation to enable zero-dialog silent hardware printing.
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    While offline, QuickPrint seamlessly uses standard browser printing.
+                  </Typography>
+                </Alert>
+
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
+                  <Button
+                    variant="outlined"
+                    startIcon={testPrinting ? <CircularProgress size={16} /> : <PrintIcon />}
+                    onClick={handleTestPrint}
+                    disabled={testPrinting}
+                  >
+                    {testPrinting ? 'Opening Test...' : 'Test Browser Print'}
+                  </Button>
+                  <Typography variant="caption" color="text.secondary">
+                    Tests browser print dialog with the diagnostic test slip.
+                  </Typography>
+                </Box>
+
+                {testPrintStatus && (
+                  <Alert severity={testPrintStatus.type} sx={{ mt: 1 }}>
+                    {testPrintStatus.message}
+                  </Alert>
+                )}
+              </Box>
             )}
           </Paper>
 

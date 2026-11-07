@@ -89,11 +89,41 @@ export function useMerchantRelay(merchantId, user, onNewJob) {
   };
 }
 
-export function playChime() {
-  try {
+let sharedAudioCtx = null;
+
+function getAudioContext() {
+  if (typeof window === 'undefined') return null;
+  if (!sharedAudioCtx) {
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
     if (AudioCtx) {
-      const ctx = new AudioCtx();
+      sharedAudioCtx = new AudioCtx();
+    }
+  }
+  return sharedAudioCtx;
+}
+
+if (typeof window !== 'undefined') {
+  const unlockAudio = () => {
+    const ctx = getAudioContext();
+    if (ctx && ctx.state === 'suspended') {
+      ctx.resume().catch(() => {});
+    }
+    window.removeEventListener('click', unlockAudio);
+    window.removeEventListener('touchstart', unlockAudio);
+    window.removeEventListener('keydown', unlockAudio);
+  };
+  window.addEventListener('click', unlockAudio, { passive: true });
+  window.addEventListener('touchstart', unlockAudio, { passive: true });
+  window.addEventListener('keydown', unlockAudio, { passive: true });
+}
+
+export function playChime() {
+  try {
+    const ctx = getAudioContext();
+    if (ctx) {
+      if (ctx.state === 'suspended') {
+        ctx.resume().catch(() => {});
+      }
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.type = 'sine';

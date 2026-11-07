@@ -89,6 +89,7 @@ export default function MerchantDashboardPage() {
     clearActionNotice,
     manualDuplexPrompt,
     closeManualDuplexPrompt,
+    cancelProcessing,
     handlePrint,
     handleDone,
     handleDelete,
@@ -325,7 +326,7 @@ export default function MerchantDashboardPage() {
       <ProcessingDialog
         open={Boolean(processingJobId)}
         printProgress={printProgress}
-        onCancel={() => window.location.reload()}
+        onCancel={cancelProcessing}
       />
 
       {/* Manual Duplex Paper Reload Modal (Canon G3030 / G3730 single-sided support) */}

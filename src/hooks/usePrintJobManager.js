@@ -94,224 +94,248 @@ export function usePrintJobManager(merchantId, merchantName, pricePerPageBW = 2,
       totalPages += billable * copies;
     }
 
-    try {
-      const isDaemonActive = daemonState.isOnline;
+    const pinDisplay =
+      job.pin ||
+      (job.tokenNumber
+        ? String(job.tokenNumber).replace(/\D/g, '').slice(-4)
+        : String(job.id).replace(/\D/g, '').slice(-4) || '----');
 
-      // Direct system print: send to local daemon for silent spool or fallback to browser dialog
-      for (let i = 0; i < job.files.length; i++) {
-        const file = job.files[i];
-        let blob = await getJobBlob(job.id, i);
-        if (!blob && file.blob instanceof Blob) blob = file.blob;
-        if (!blob && file.file instanceof Blob) blob = file.file;
+    const isDaemonActive = daemonState.isOnline;
+    const activePrinter = daemonState.selectedPrinter || 'Universal Counter Printer';
 
-        if (blob) {
-          const isDuplex = Boolean(file.specs?.duplex || file.specs?.sides === 'double' || file.specs?.manualDuplex);
-          const pageCount = file.pageCount || file.specs?.pageCount || 1;
+    const finishJob = async () => {
+      try {
+        await updatePrintJob(job.id, {
+          status: 'printed',
+          cost: totalCost,
+          totalPages,
+        });
 
-          if (isDaemonActive) {
-            // Manual Duplex Workflow: If duplex requested on a multi-page document
-            if (isDuplex && pageCount > 1) {
-              setPrintProgress({
-                current: i + 1,
-                total: job.files.length,
-                fileName: file.name || `Document ${i + 1}`,
-                status: `Manual Duplex Pass 1: Spooling odd pages (1, 3, 5...) to ${daemonState.selectedPrinter || 'counter printer'}...`,
-              });
+        const printModeLabel = isDaemonActive ? 'spooled to printer' : 'printed';
+        setActionNotice({
+          message: `Order #${pinDisplay} ${printModeLabel}: ${totalPages} page(s) (₹${totalCost.toFixed(2)})`,
+          severity: 'success',
+        });
+      } catch (err) {
+        console.error('Error completing print job status:', err);
+        setActionNotice({
+          message: `Failed to mark order as printed: ${err.message}`,
+          severity: 'error',
+        });
+      } finally {
+        setProcessingJobId(null);
+        setPrintProgress({ current: 0, total: 0, fileName: '', status: '' });
+      }
+    };
 
-              // Pass 1: Spool Odd Pages
-              await sendSilentPrintJob({
-                jobId: `${job.id}_${i}_odd`,
-                token: job.pin || job.tokenNumber,
-                fileBlob: blob,
-                fileName: file.name || `document_${i + 1}.pdf`,
-                specs: { ...file.specs, pages: 'odd' },
-                printerName: daemonState.selectedPrinter,
-              });
-
-              // Close progress modal and prompt attendant to reload paper
-              setProcessingJobId(null);
-              setPrintProgress({ current: 0, total: 0, fileName: '', status: '' });
-
-              setManualDuplexPrompt({
-                jobPin: job.pin || (job.tokenNumber ? String(job.tokenNumber).replace(/\D/g, '').slice(-4) : '----'),
-                fileName: file.name || `Document ${i + 1}`,
-                printerName: daemonState.selectedPrinter,
-                totalPages: pageCount,
-                onClose: () => setManualDuplexPrompt(null),
-                onContinue: async () => {
-                  setManualDuplexPrompt(null);
-                  setProcessingJobId(job.id);
-                  setPrintProgress({
-                    current: i + 1,
-                    total: job.files.length,
-                    fileName: file.name || `Document ${i + 1}`,
-                    status: `Manual Duplex Pass 2: Spooling even pages (2, 4, 6...) to ${daemonState.selectedPrinter || 'counter printer'}...`,
-                  });
-
-                  try {
-                    // Pass 2: Spool Even Pages on reverse side
-                    await sendSilentPrintJob({
-                      jobId: `${job.id}_${i}_even`,
-                      token: job.pin || job.tokenNumber,
-                      fileBlob: blob,
-                      fileName: file.name || `document_${i + 1}.pdf`,
-                      specs: { ...file.specs, pages: 'even' },
-                      printerName: daemonState.selectedPrinter,
-                    });
-
-                    await updatePrintJob(job.id, {
-                      status: 'printed',
-                      cost: totalCost,
-                      totalPages,
-                    });
-
-                    const pinDisplay = job.pin || (job.tokenNumber ? String(job.tokenNumber).replace(/\D/g, '').slice(-4) : '----');
-                    setActionNotice({
-                      message: `Order #${pinDisplay} manual duplex printed: ${totalPages} page(s) (₹${totalCost.toFixed(2)})`,
-                      severity: 'success',
-                    });
-                  } catch (evenErr) {
-                    console.error('Manual duplex second pass error:', evenErr);
-                    setActionNotice({
-                      message: `Failed to print even pages: ${evenErr.message}`,
-                      severity: 'error',
-                    });
-                  } finally {
-                    setProcessingJobId(null);
-                    setPrintProgress({ current: 0, total: 0, fileName: '', status: '' });
-                  }
-                },
-              });
-
-              return; // Pause execution for attendant prompt
-            }
-
-            setPrintProgress({
-              current: i + 1,
-              total: job.files.length,
-              fileName: file.name || `Document ${i + 1}`,
-              status: `Spooling silently to ${daemonState.selectedPrinter || 'counter printer'}...`,
-            });
-            try {
-              await sendSilentPrintJob({
-                jobId: `${job.id}_${i}`,
-                token: job.pin || job.tokenNumber,
-                fileBlob: blob,
-                fileName: file.name || `document_${i + 1}.pdf`,
-                specs: file.specs || {},
-                printerName: daemonState.selectedPrinter,
-              });
-            } catch (daemonErr) {
-              console.warn('Local daemon spooling failed, falling back to browser print:', daemonErr);
-              await securePrint(blob, file.name || 'document', file.specs || {}, merchantName);
-            }
-          } else {
-            // Mobile Browser / Android Print Spooler Flow
-            if (isDuplex && pageCount > 1) {
-              setPrintProgress({
-                current: i + 1,
-                total: job.files.length,
-                fileName: file.name || `Document ${i + 1}`,
-                status: 'Manual Duplex: Slicing odd pages (1, 3, 5...)...',
-              });
-
-              // Pass 1: Slice into pure Odd pages PDF
-              const oddBlob = await slicePdfPages(blob, 'odd');
-              await securePrint(oddBlob, `${file.name || 'document'}_odd.pdf`, { ...file.specs, duplex: false }, merchantName);
-
-              // Pause execution and prompt attendant/parents to reload paper
-              setProcessingJobId(null);
-              setPrintProgress({ current: 0, total: 0, fileName: '', status: '' });
-
-              setManualDuplexPrompt({
-                jobPin: job.pin || (job.tokenNumber ? String(job.tokenNumber).replace(/\D/g, '').slice(-4) : '----'),
-                fileName: file.name || `Document ${i + 1}`,
-                printerName: 'Mobile Printer',
-                totalPages: pageCount,
-                onClose: () => setManualDuplexPrompt(null),
-                onContinue: async () => {
-                  setManualDuplexPrompt(null);
-                  setProcessingJobId(job.id);
-                  setPrintProgress({
-                    current: i + 1,
-                    total: job.files.length,
-                    fileName: file.name || `Document ${i + 1}`,
-                    status: 'Manual Duplex: Slicing even pages (2, 4, 6...)...',
-                  });
-
-                  try {
-                    // Pass 2: Slice into pure Even pages PDF
-                    const evenBlob = await slicePdfPages(blob, 'even');
-                    await securePrint(evenBlob, `${file.name || 'document'}_even.pdf`, { ...file.specs, duplex: false }, merchantName);
-
-                    await updatePrintJob(job.id, {
-                      status: 'printed',
-                      cost: totalCost,
-                      totalPages,
-                    });
-
-                    const pinDisplay = job.pin || (job.tokenNumber ? String(job.tokenNumber).replace(/\D/g, '').slice(-4) : '----');
-                    setActionNotice({
-                      message: `Order #${pinDisplay} manual duplex printed: ${totalPages} page(s) (₹${totalCost.toFixed(2)})`,
-                      severity: 'success',
-                    });
-                  } catch (evenErr) {
-                    console.error('Mobile manual duplex pass 2 error:', evenErr);
-                    setActionNotice({
-                      message: `Failed to print even pages: ${evenErr.message}`,
-                      severity: 'error',
-                    });
-                  } finally {
-                    setProcessingJobId(null);
-                    setPrintProgress({ current: 0, total: 0, fileName: '', status: '' });
-                  }
-                },
-              });
-
-              return; // Pause for paper reload
-            }
-
-            // Normal single-page or single-sided print on mobile
-            setPrintProgress({
-              current: i + 1,
-              total: job.files.length,
-              fileName: file.name || `Document ${i + 1}`,
-              status: 'Opening system print dialog...',
-            });
-            try {
-              await securePrint(blob, file.name || 'document', file.specs || {}, merchantName);
-            } catch (printErr) {
-              console.warn('System print invocation note:', printErr);
-            }
-          }
-        }
+    const processFileAt = async (index) => {
+      if (index >= job.files.length) {
+        await finishJob();
+        return;
       }
 
-      // Mark job as printed (ready for counter pickup / completed print spool)
-      await updatePrintJob(job.id, {
-        status: 'printed',
-        cost: totalCost,
-        totalPages,
-      });
+      const file = job.files[index];
+      let blob = await getJobBlob(job.id, index);
+      if (!blob && file.blob instanceof Blob) blob = file.blob;
+      if (!blob && file.file instanceof Blob) blob = file.file;
 
-      const pinDisplay =
-        job.pin ||
-        (job.tokenNumber
-          ? String(job.tokenNumber).replace(/\D/g, '').slice(-4)
-          : String(job.id).replace(/\D/g, '').slice(-4) || '----');
+      if (!blob) {
+        // Blob missing, advance to next file
+        await processFileAt(index + 1);
+        return;
+      }
 
-      const printModeLabel = isDaemonActive ? 'spooled to printer' : 'printed';
-      setActionNotice({
-        message: `Order #${pinDisplay} ${printModeLabel}: ${totalPages} page(s) (₹${totalCost.toFixed(2)})`,
-        severity: 'success',
+      const isDuplex = Boolean(file.specs?.duplex || file.specs?.sides === 'double' || file.specs?.manualDuplex);
+      const pageCount = file.pageCount || file.specs?.pageCount || 1;
+      const isWordDoc = file.name?.endsWith('.docx') || file.name?.endsWith('.doc') || blob.type?.includes('word');
+
+      // 1. Word Document (.docx / .doc)
+      // Must be rendered and printed via browser layout engine
+      if (isWordDoc) {
+        setPrintProgress({
+          current: index + 1,
+          total: job.files.length,
+          fileName: file.name || `Document ${index + 1}`,
+          status: 'Formatting Word document in browser layout engine...',
+        });
+        try {
+          await securePrint(blob, file.name || 'document.docx', file.specs || {}, merchantName);
+        } catch (err) {
+          console.warn('Word print invocation notice:', err);
+        }
+        await processFileAt(index + 1);
+        return;
+      }
+
+      // 2. Hardware Daemon Online
+      if (isDaemonActive) {
+        if (isDuplex && pageCount > 1) {
+          setPrintProgress({
+            current: index + 1,
+            total: job.files.length,
+            fileName: file.name || `Document ${index + 1}`,
+            status: `Manual Duplex Pass 1: Spooling odd pages (1, 3, 5...) to ${activePrinter}...`,
+          });
+
+          try {
+            await sendSilentPrintJob({
+              jobId: `${job.id}_${index}_odd`,
+              token: job.pin || job.tokenNumber,
+              fileBlob: blob,
+              fileName: file.name || `document_${index + 1}.pdf`,
+              specs: { ...file.specs, pages: 'odd' },
+              printerName: daemonState.selectedPrinter,
+            });
+          } catch (spoolErr) {
+            console.warn('Spooling odd pages failed, falling back to browser print:', spoolErr);
+            const oddBlob = await slicePdfPages(blob, 'odd');
+            await securePrint(oddBlob, `${file.name || 'document'}_odd.pdf`, { ...file.specs, duplex: false }, merchantName);
+          }
+
+          // Pause progress and prompt attendant to reload paper
+          setProcessingJobId(null);
+          setPrintProgress({ current: 0, total: 0, fileName: '', status: '' });
+
+          setManualDuplexPrompt({
+            jobPin: pinDisplay,
+            fileName: file.name || `Document ${index + 1}`,
+            printerName: activePrinter,
+            totalPages: pageCount,
+            onClose: () => {
+              setManualDuplexPrompt(null);
+              setProcessingJobId(null);
+              setPrintProgress({ current: 0, total: 0, fileName: '', status: '' });
+            },
+            onContinue: async () => {
+              setManualDuplexPrompt(null);
+              setProcessingJobId(job.id);
+              setPrintProgress({
+                current: index + 1,
+                total: job.files.length,
+                fileName: file.name || `Document ${index + 1}`,
+                status: `Manual Duplex Pass 2: Spooling even pages (2, 4, 6...) to ${activePrinter}...`,
+              });
+
+              try {
+                await sendSilentPrintJob({
+                  jobId: `${job.id}_${index}_even`,
+                  token: job.pin || job.tokenNumber,
+                  fileBlob: blob,
+                  fileName: file.name || `document_${index + 1}.pdf`,
+                  specs: { ...file.specs, pages: 'even' },
+                  printerName: daemonState.selectedPrinter,
+                });
+              } catch (evenErr) {
+                console.warn('Spooling even pages failed, falling back to browser print:', evenErr);
+                const evenBlob = await slicePdfPages(blob, 'even');
+                await securePrint(evenBlob, `${file.name || 'document'}_even.pdf`, { ...file.specs, duplex: false }, merchantName);
+              }
+
+              // Advance to next file in order
+              await processFileAt(index + 1);
+            },
+          });
+          return; // Wait for paper re-feed prompt
+        }
+
+        // Single-sided print via daemon
+        setPrintProgress({
+          current: index + 1,
+          total: job.files.length,
+          fileName: file.name || `Document ${index + 1}`,
+          status: `Spooling silently to ${activePrinter}...`,
+        });
+        try {
+          await sendSilentPrintJob({
+            jobId: `${job.id}_${index}`,
+            token: job.pin || job.tokenNumber,
+            fileBlob: blob,
+            fileName: file.name || `document_${index + 1}.pdf`,
+            specs: file.specs || {},
+            printerName: daemonState.selectedPrinter,
+          });
+        } catch (daemonErr) {
+          console.warn('Local daemon spooling failed, falling back to browser print:', daemonErr);
+          await securePrint(blob, file.name || 'document', file.specs || {}, merchantName);
+        }
+        await processFileAt(index + 1);
+        return;
+      }
+
+      // 3. Mobile Device / Browser System Spooler Flow
+      if (isDuplex && pageCount > 1) {
+        setPrintProgress({
+          current: index + 1,
+          total: job.files.length,
+          fileName: file.name || `Document ${index + 1}`,
+          status: 'Manual Duplex: Slicing odd pages (1, 3, 5...)...',
+        });
+
+        // Pass 1: Slice and print odd pages
+        const oddBlob = await slicePdfPages(blob, 'odd');
+        await securePrint(oddBlob, `${file.name || 'document'}_odd.pdf`, { ...file.specs, duplex: false }, merchantName);
+
+        // Pause progress and prompt attendant to reload paper
+        setProcessingJobId(null);
+        setPrintProgress({ current: 0, total: 0, fileName: '', status: '' });
+
+        setManualDuplexPrompt({
+          jobPin: pinDisplay,
+          fileName: file.name || `Document ${index + 1}`,
+          printerName: 'System Printer',
+          totalPages: pageCount,
+          onClose: () => {
+            setManualDuplexPrompt(null);
+            setProcessingJobId(null);
+            setPrintProgress({ current: 0, total: 0, fileName: '', status: '' });
+          },
+          onContinue: async () => {
+            setManualDuplexPrompt(null);
+            setProcessingJobId(job.id);
+            setPrintProgress({
+              current: index + 1,
+              total: job.files.length,
+              fileName: file.name || `Document ${index + 1}`,
+              status: 'Manual Duplex: Slicing even pages (2, 4, 6...)...',
+            });
+
+            try {
+              const evenBlob = await slicePdfPages(blob, 'even');
+              await securePrint(evenBlob, `${file.name || 'document'}_even.pdf`, { ...file.specs, duplex: false }, merchantName);
+            } catch (evenErr) {
+              console.error('Mobile manual duplex pass 2 error:', evenErr);
+            }
+
+            // Advance to next file in order
+            await processFileAt(index + 1);
+          },
+        });
+        return; // Wait for paper re-feed prompt
+      }
+
+      // Single-sided print on mobile
+      setPrintProgress({
+        current: index + 1,
+        total: job.files.length,
+        fileName: file.name || `Document ${index + 1}`,
+        status: 'Opening system print dialog...',
       });
+      try {
+        await securePrint(blob, file.name || 'document', file.specs || {}, merchantName);
+      } catch (printErr) {
+        console.warn('System print invocation note:', printErr);
+      }
+      await processFileAt(index + 1);
+    };
+
+    try {
+      await processFileAt(0);
     } catch (err) {
-      console.error('Error updating print status:', err);
+      console.error('Error during printing pipeline:', err);
       setActionNotice({
         message: `Failed to print order: ${err.message}`,
         severity: 'error',
       });
-    } finally {
       setProcessingJobId(null);
       setPrintProgress({ current: 0, total: 0, fileName: '', status: '' });
     }
@@ -399,7 +423,8 @@ export function usePrintJobManager(merchantId, merchantName, pricePerPageBW = 2,
         };
         if (markAsPrinted) {
           updates.status = 'printed';
-          if (daemonState.isOnline && updatedBlob) {
+          const isDocx = currentFile.name?.endsWith('.docx') || currentFile.name?.endsWith('.doc') || updatedBlob?.type?.includes('word');
+          if (daemonState.isOnline && updatedBlob && !isDocx) {
             try {
               await sendSilentPrintJob({
                 jobId: `${job.id}_${fileIndex}_direct`,
@@ -411,6 +436,13 @@ export function usePrintJobManager(merchantId, merchantName, pricePerPageBW = 2,
               });
             } catch (spoolErr) {
               console.warn('Direct print after edits spooling notice:', spoolErr);
+              await securePrint(updatedBlob, currentFile.name || 'document', mergedSpecs, merchantName);
+            }
+          } else if (updatedBlob) {
+            try {
+              await securePrint(updatedBlob, currentFile.name || 'document', mergedSpecs, merchantName);
+            } catch (printErr) {
+              console.warn('Direct browser print notice:', printErr);
             }
           }
         }
@@ -533,6 +565,10 @@ export function usePrintJobManager(merchantId, merchantName, pricePerPageBW = 2,
   return {
     processingJobId,
     printProgress,
+    cancelProcessing: () => {
+      setProcessingJobId(null);
+      setPrintProgress({ current: 0, total: 0, fileName: '', status: '' });
+    },
     actionNotice,
     clearActionNotice: () => setActionNotice(null),
     manualDuplexPrompt,

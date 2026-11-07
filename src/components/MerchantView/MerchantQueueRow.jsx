@@ -161,14 +161,14 @@ export default function MerchantQueueRow({
                 startIcon={<CheckCircleOutlineIcon />}
                 onClick={() => onDone(job)}
                 sx={{
-                  py: 1,
+                  py: 1.1,
                   borderRadius: 2,
                   textTransform: 'none',
                   fontWeight: 800,
-                  fontSize: '0.9rem',
+                  fontSize: '0.92rem',
                 }}
               >
-                Done
+                Done • {specs.cost}
               </Button>
             )}
 
@@ -279,7 +279,7 @@ export default function MerchantQueueRow({
                 onClick={() => onDone(job)}
                 sx={{ minWidth: 100, textTransform: 'none', fontWeight: 800 }}
               >
-                Done
+                Done • {specs.cost}
               </Button>
             )}
 

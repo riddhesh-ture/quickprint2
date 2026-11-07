@@ -19,7 +19,7 @@ export default function ProcessingDialog({ open, printProgress, onCancel }) {
       setShowCancel(false);
       return;
     }
-    const timer = setTimeout(() => setShowCancel(true), 3500);
+    const timer = setTimeout(() => setShowCancel(true), 2000);
     return () => clearTimeout(timer);
   }, [open]);
 

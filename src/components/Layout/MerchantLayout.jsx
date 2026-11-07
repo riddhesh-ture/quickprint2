@@ -3,7 +3,8 @@ import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import {
   Box, Drawer, AppBar, Toolbar, Typography, List, ListItem, ListItemButton,
   ListItemIcon, ListItemText, IconButton, Avatar, Menu, MenuItem, Divider,
-  Badge, useMediaQuery, useTheme, Chip, Button
+  Badge, useMediaQuery, useTheme, Chip, Button, BottomNavigation, BottomNavigationAction,
+  Paper
 } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
 import DashboardIcon from '@mui/icons-material/Dashboard';
@@ -190,60 +191,162 @@ export default function MerchantLayout() {
     </Box>
   );
 
+  // Determine current active path for bottom navigation
+  const currentTab = ['/merchant/analytics', '/merchant/settings'].includes(location.pathname)
+    ? location.pathname
+    : '/merchant/dashboard';
+
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: 'grey.100' }}>
-      {/* Mobile App Bar */}
+      {/* Mobile Top App Bar */}
       {isMobile && (
-        <AppBar position="fixed" sx={{ bgcolor: 'white', color: 'text.primary' }} elevation={1}>
-          <Toolbar>
-            <IconButton edge="start" onClick={handleDrawerToggle} sx={{ mr: 2 }}>
-              <MenuIcon />
-            </IconButton>
-            <StorefrontIcon sx={{ mr: 1, color: 'primary.main' }} />
-            <Typography variant="h6" fontWeight="bold" sx={{ flexGrow: 1 }}>
-              QuickPrint
-            </Typography>
-            {pendingCount > 0 && (
-              <Badge badgeContent={pendingCount} color="error">
-                <NotificationsIcon />
-              </Badge>
-            )}
+        <AppBar
+          position="fixed"
+          elevation={0}
+          sx={{
+            bgcolor: 'background.paper',
+            color: 'text.primary',
+            borderBottom: '1px solid',
+            borderColor: 'divider',
+            zIndex: 1100,
+          }}
+        >
+          <Toolbar sx={{ minHeight: 56, px: 2, display: 'flex', justifyContent: 'space-between' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <StorefrontIcon sx={{ color: 'primary.main', fontSize: 26 }} />
+              <Box>
+                <Typography variant="subtitle1" fontWeight={800} sx={{ lineHeight: 1.15 }}>
+                  QuickPrint
+                </Typography>
+                <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block', maxWidth: 170 }}>
+                  {userData?.shopName || 'Merchant Station'}
+                </Typography>
+              </Box>
+            </Box>
+
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <IconButton size="small" onClick={(e) => setAnchorEl(e.currentTarget)}>
+                <Avatar sx={{ bgcolor: 'primary.main', width: 32, height: 32, fontSize: '0.85rem', fontWeight: 700 }}>
+                  {userData?.ownerName?.[0] || 'M'}
+                </Avatar>
+              </IconButton>
+              <Menu
+                anchorEl={anchorEl}
+                open={Boolean(anchorEl)}
+                onClose={() => setAnchorEl(null)}
+                PaperProps={{ sx: { minWidth: 200, borderRadius: 2, mt: 1 } }}
+              >
+                <Box sx={{ px: 2, py: 1.5 }}>
+                  <Typography variant="subtitle2" fontWeight={700} noWrap>
+                    {userData?.shopName || 'Your Shop'}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>
+                    {user?.email}
+                  </Typography>
+                </Box>
+                <Divider />
+                <MenuItem onClick={() => { setAnchorEl(null); navigate('/merchant/settings'); }}>
+                  <ListItemIcon><SettingsIcon fontSize="small" /></ListItemIcon>
+                  <ListItemText primary="Shop Settings" />
+                </MenuItem>
+                <MenuItem onClick={handleLogout} sx={{ color: 'error.main' }}>
+                  <ListItemIcon><LogoutIcon fontSize="small" color="error" /></ListItemIcon>
+                  <ListItemText primary="Sign Out" />
+                </MenuItem>
+              </Menu>
+            </Box>
           </Toolbar>
         </AppBar>
       )}
 
-      {/* Sidebar */}
-      <Box component="nav" sx={{ width: { md: DRAWER_WIDTH }, flexShrink: { md: 0 } }}>
-        <Drawer
-          variant={isMobile ? 'temporary' : 'permanent'}
-          open={isMobile ? mobileOpen : true}
-          onClose={handleDrawerToggle}
-          ModalProps={{ keepMounted: true }}
-          sx={{
-            '& .MuiDrawer-paper': {
-              boxSizing: 'border-box',
-              width: DRAWER_WIDTH,
-              borderRight: '1px solid',
-              borderColor: 'divider',
-            },
-          }}
-        >
-          {drawer}
-        </Drawer>
-      </Box>
+      {/* Desktop Sidebar (Hidden on Mobile) */}
+      {!isMobile && (
+        <Box component="nav" sx={{ width: DRAWER_WIDTH, flexShrink: 0 }}>
+          <Drawer
+            variant="permanent"
+            open
+            sx={{
+              '& .MuiDrawer-paper': {
+                boxSizing: 'border-box',
+                width: DRAWER_WIDTH,
+                borderRight: '1px solid',
+                borderColor: 'divider',
+              },
+            }}
+          >
+            {drawer}
+          </Drawer>
+        </Box>
+      )}
 
-      {/* Main Content */}
+      {/* Main Content Area */}
       <Box
         component="main"
         sx={{
           flexGrow: 1,
           width: { md: `calc(100% - ${DRAWER_WIDTH}px)` },
-          mt: { xs: 8, md: 0 },
+          mt: { xs: '58px', md: 0 },
+          pb: { xs: '76px', md: 3 },
           minHeight: '100vh',
         }}
       >
         <Outlet context={{ pendingCount, setPendingCount, refreshPendingCount: fetchPendingCount }} />
       </Box>
+
+      {/* Mobile Bottom Navigation Bar - Effortless One-Hand Thumb Reach */}
+      {isMobile && (
+        <Paper
+          elevation={8}
+          sx={{
+            position: 'fixed',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            zIndex: 1200,
+            borderTop: '1px solid',
+            borderColor: 'divider',
+          }}
+        >
+          <BottomNavigation
+            value={currentTab}
+            onChange={(_e, newValue) => {
+              navigate(newValue);
+            }}
+            showLabels
+            sx={{
+              height: 60,
+              '& .Mui-selected': {
+                color: 'primary.main',
+                fontWeight: 700,
+              },
+            }}
+          >
+            <BottomNavigationAction
+              label="Queue"
+              value="/merchant/dashboard"
+              icon={
+                pendingCount > 0 ? (
+                  <Badge badgeContent={pendingCount} color="error">
+                    <PrintIcon />
+                  </Badge>
+                ) : (
+                  <PrintIcon />
+                )
+              }
+            />
+            <BottomNavigationAction
+              label="Analytics"
+              value="/merchant/analytics"
+              icon={<BarChartIcon />}
+            />
+            <BottomNavigationAction
+              label="Settings"
+              value="/merchant/settings"
+              icon={<SettingsIcon />}
+            />
+          </BottomNavigation>
+        </Paper>
+      )}
     </Box>
   );
 }

@@ -329,8 +329,8 @@ export default function MerchantAnalyticsPage() {
       </Box>
 
       {/* Key Metrics */}
-      <Grid container spacing={3} sx={{ mb: 4 }}>
-        <Grid item xs={12} sm={6} md={3}>
+      <Grid container spacing={2.5} sx={{ mb: 3 }}>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
           <StatCard
             title="Today's Revenue"
             value={`₹${stats.todayEarnings || 0}`}
@@ -341,7 +341,7 @@ export default function MerchantAnalyticsPage() {
             color="success"
           />
         </Grid>
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
           <StatCard
             title="This Month"
             value={`₹${stats.monthEarnings || 0}`}
@@ -350,7 +350,7 @@ export default function MerchantAnalyticsPage() {
             color="primary"
           />
         </Grid>
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
           <StatCard
             title="Total Revenue"
             value={`₹${stats.totalEarnings || 0}`}
@@ -359,7 +359,7 @@ export default function MerchantAnalyticsPage() {
             color="info"
           />
         </Grid>
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
           <StatCard
             title="Avg. Job Value"
             value={`₹${analyticsData?.avgJobValue || 0}`}
@@ -371,9 +371,9 @@ export default function MerchantAnalyticsPage() {
       </Grid>
 
       {/* Charts Row 1: Revenue & Prints Trends */}
-      <Grid container spacing={3} sx={{ mb: 4 }}>
-        <Grid item xs={12} lg={8}>
-          <Paper sx={{ p: 3, height: '100%' }}>
+      <Grid container spacing={2.5} sx={{ mb: 3 }}>
+        <Grid size={{ xs: 12, lg: 8 }}>
+          <Paper sx={{ p: { xs: 2, sm: 3 }, height: '100%' }}>
             <SectionHeader
               title="Revenue & Prints Overview"
               subtitle={`${timeRange === 'week' ? 'Last 7 days' : timeRange === 'month' ? 'Last 30 days' : 'Last 12 months'} performance`}
@@ -394,8 +394,8 @@ export default function MerchantAnalyticsPage() {
             </ResponsiveContainer>
           </Paper>
         </Grid>
-        <Grid item xs={12} lg={4}>
-          <Paper sx={{ p: 3, height: '100%' }}>
+        <Grid size={{ xs: 12, lg: 4 }}>
+          <Paper sx={{ p: { xs: 2, sm: 3 }, height: '100%' }}>
             <SectionHeader title="Print Type Distribution" subtitle="Color vs Black & White" />
             <ResponsiveContainer width="100%" height={280}>
               <PieChart>
@@ -421,9 +421,9 @@ export default function MerchantAnalyticsPage() {
       </Grid>
 
       {/* Charts Row 2: Detailed Analytics */}
-      <Grid container spacing={3} sx={{ mb: 4 }}>
-        <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 3 }}>
+      <Grid container spacing={2.5} sx={{ mb: 3 }}>
+        <Grid size={{ xs: 12, md: 6 }}>
+          <Paper sx={{ p: { xs: 2, sm: 3 } }}>
             <SectionHeader title="Peak Hours" subtitle="Job distribution throughout the day" />
             <ResponsiveContainer width="100%" height={280}>
               <AreaChart data={analyticsData?.hourlyData || []}>
@@ -436,8 +436,8 @@ export default function MerchantAnalyticsPage() {
             </ResponsiveContainer>
           </Paper>
         </Grid>
-        <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 3 }}>
+        <Grid size={{ xs: 12, md: 6 }}>
+          <Paper sx={{ p: { xs: 2, sm: 3 } }}>
             <SectionHeader title="File Types Received" subtitle="Distribution by document type" />
             <ResponsiveContainer width="100%" height={280}>
               <BarChart data={analyticsData?.fileTypeData || []} layout="vertical">
@@ -457,9 +457,9 @@ export default function MerchantAnalyticsPage() {
       </Grid>
 
       {/* Charts Row 3: Additional Insights */}
-      <Grid container spacing={3}>
-        <Grid item xs={12} md={4}>
-          <Paper sx={{ p: 3 }}>
+      <Grid container spacing={2.5}>
+        <Grid size={{ xs: 12, md: 4 }}>
+          <Paper sx={{ p: { xs: 2, sm: 3 } }}>
             <SectionHeader title="Paper Sizes" subtitle="Most used sizes" />
             <ResponsiveContainer width="100%" height={250}>
               <PieChart>
@@ -480,8 +480,8 @@ export default function MerchantAnalyticsPage() {
             </ResponsiveContainer>
           </Paper>
         </Grid>
-        <Grid item xs={12} md={4}>
-          <Paper sx={{ p: 3 }}>
+        <Grid size={{ xs: 12, md: 4 }}>
+          <Paper sx={{ p: { xs: 2, sm: 3 } }}>
             <SectionHeader title="Copies per Job" subtitle="Copy quantity distribution" />
             <ResponsiveContainer width="100%" height={250}>
               <BarChart data={analyticsData?.copiesData || []}>
@@ -494,8 +494,8 @@ export default function MerchantAnalyticsPage() {
             </ResponsiveContainer>
           </Paper>
         </Grid>
-        <Grid item xs={12} md={4}>
-          <Paper sx={{ p: 3 }}>
+        <Grid size={{ xs: 12, md: 4 }}>
+          <Paper sx={{ p: { xs: 2, sm: 3 } }}>
             <SectionHeader title="Recent Activity" subtitle="Latest print jobs" />
             <List dense sx={{ maxHeight: 250, overflow: 'auto' }}>
               {analyticsData?.recentJobs?.map((job, index) => (

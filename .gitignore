@@ -37,6 +37,25 @@ lerna-debug.log*
 .cloudflare/
 .firebase/
 
+# Scripts & Build Automation (kept local)
+scripts/
+script/
+**/scripts/
+
+# Tests & Test Suites (kept local)
+tests/
+test/
+**/tests/
+**/test/
+*.test.js
+*.test.jsx
+*.test.ts
+*.test.tsx
+*.spec.js
+*.spec.jsx
+*.spec.ts
+*.spec.tsx
+
 # Project documentation, presentation & planning artifacts (kept local / not for repo)
 PROGRESS.md
 progress.md
@@ -53,7 +72,6 @@ context.md
 WORKFLOW.md
 workflow.md
 user-flow/
-tests/
 supabase/migrations/
 
 # Compiled Standalone Executables
