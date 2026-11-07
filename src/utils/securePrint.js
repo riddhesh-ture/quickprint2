@@ -1,4 +1,18 @@
 // src/utils/securePrint.js
+import { pdfjs } from 'react-pdf';
+
+// Configure bundled PDF.js worker
+if (typeof window !== 'undefined' && !pdfjs.GlobalWorkerOptions.workerSrc) {
+  try {
+    pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+      'pdfjs-dist/build/pdf.worker.min.mjs',
+      import.meta.url
+    ).toString();
+  } catch {
+    pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
+  }
+}
+
 /**
  * Secure print utility with anti-download protection, popup blocker bypass,
  * and zero base64 memory bloat (uses clean Object URLs).
@@ -129,10 +143,12 @@ function resolvePrintTarget(existingWindow) {
   return { targetWin: iframeElem.contentWindow, targetDoc: iframeElem.contentWindow.document, iframeElem };
 }
 
-function getAfterPrintScript(blobUrl, printId) {
+function getAfterPrintScript(blobUrls, printId) {
+  const urlList = Array.isArray(blobUrls) ? blobUrls : [blobUrls].filter(Boolean);
+  const revokeStatements = urlList.map((u) => `try { URL.revokeObjectURL('${u}'); } catch(e) {}`).join('\n');
   return `
     window.onafterprint = function() {
-      try { URL.revokeObjectURL('${blobUrl}'); } catch(e) {}
+      ${revokeStatements}
       try {
         if (window.parent && window.parent !== window) {
           window.parent.postMessage({ type: 'print_done', printId: '${printId}' }, '*');
@@ -144,18 +160,19 @@ function getAfterPrintScript(blobUrl, printId) {
       } catch(e) {}
     };
     window.addEventListener('beforeunload', function() {
-      try { URL.revokeObjectURL('${blobUrl}'); } catch(e) {}
+      ${revokeStatements}
     });
   `;
 }
 
-function monitorPrintCompletion({ targetWin, blobUrl, printId, iframeElem, resolve }) {
+function monitorPrintCompletion({ targetWin, blobUrls, printId, iframeElem, resolve }) {
+  const urlList = Array.isArray(blobUrls) ? blobUrls : [blobUrls].filter(Boolean);
   const cleanup = () => {
-    try {
-      URL.revokeObjectURL(blobUrl);
-    } catch (_err) {
-      // Ignored if already revoked
-    }
+    urlList.forEach((u) => {
+      try {
+        URL.revokeObjectURL(u);
+      } catch (_err) {}
+    });
     if (iframeElem && iframeElem.parentNode) {
       iframeElem.parentNode.removeChild(iframeElem);
     }
@@ -244,80 +261,121 @@ export async function securePrintImage(fileBlob, fileName, specs, merchantName, 
     targetDoc.write(html);
     targetDoc.close();
 
-    monitorPrintCompletion({ targetWin, blobUrl, printId, iframeElem, resolve });
+    monitorPrintCompletion({ targetWin, blobUrls: [blobUrl], printId, iframeElem, resolve });
   });
 }
 
 /**
- * Securely print a PDF file using PDF.js and clean Object URLs (no atob / memory bloat)
+ * Securely print a PDF file using application's bundled PDF.js (zero CDN dependencies)
  */
 export async function securePrintPDF(fileBlob, fileName, specs, merchantName, existingWindow = null) {
-  const blobUrl = URL.createObjectURL(fileBlob);
   const isColor = specs?.color === 'color';
   const safeFileName = escapeHtml(fileName);
   const safeMerchant = escapeHtml(merchantName);
+  const printId = 'ppdf_' + Math.random().toString(36).slice(2);
+
+  const pageUrls = [];
+  let fallbackBlobUrl = null;
+
+  try {
+    // 1. Primary Strategy: Render pages locally via application's bundled PDF.js
+    // Zero external CDN dependencies, zero worker CORS blocks, runs in local origin
+    const arrayBuffer = await fileBlob.arrayBuffer();
+    const loadingTask = pdfjs.getDocument({
+      data: new Uint8Array(arrayBuffer),
+      stopAtErrors: false,
+    });
+    const pdf = await loadingTask.promise;
+    const numPages = pdf.numPages;
+
+    for (let i = 1; i <= numPages; i++) {
+      const page = await pdf.getPage(i);
+      const viewport = page.getViewport({ scale: 1.5 });
+      const canvas = document.createElement('canvas');
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      const ctx = canvas.getContext('2d');
+      await page.render({ canvasContext: ctx, viewport }).promise;
+
+      const pageBlob = await new Promise((res) => canvas.toBlob(res, 'image/jpeg', 0.95));
+      if (pageBlob) {
+        pageUrls.push(URL.createObjectURL(pageBlob));
+      }
+    }
+    loadingTask.destroy();
+  } catch (err) {
+    console.warn('[securePrintPDF] Local rasterization note:', err);
+    fallbackBlobUrl = URL.createObjectURL(fileBlob);
+  }
 
   return new Promise((resolve) => {
     const { targetWin, targetDoc, iframeElem } = resolvePrintTarget(existingWindow);
-    const printId = 'ppdf_' + Math.random().toString(36).slice(2);
+
+    let contentHtml = '';
+    if (pageUrls.length > 0) {
+      contentHtml = `
+        <div id="pages-wrapper">
+          ${pageUrls
+            .map(
+              (url) =>
+                `<div class="page-container"><img src="${url}" class="page-img" /></div>`
+            )
+            .join('\n')}
+        </div>
+      `;
+    } else {
+      // Fallback: Embed native PDF directly if rasterization wasn't available
+      contentHtml = `
+        <div style="width: 100%; height: 100vh;">
+          <embed src="${fallbackBlobUrl}#toolbar=0&navpanes=0" type="application/pdf" width="100%" height="100%" />
+        </div>
+      `;
+    }
 
     const html = `
       <!DOCTYPE html>
       <html>
       <head>
         <title>Print - ${safeFileName}</title>
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
         <style>
           ${SECURITY_CSS}
-          canvas {
-            ${!isColor ? 'filter: grayscale(100%);' : ''}
-            display: block;
-            margin: 10px auto;
+          @page {
+            margin: 0;
+            size: auto;
+          }
+          body {
+            margin: 0;
+            padding: 0;
+            background: white;
+          }
+          .page-container {
+            page-break-after: always;
+            page-break-inside: avoid;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+          }
+          .page-img {
+            width: 100%;
             max-width: 100%;
+            display: block;
+            ${!isColor ? 'filter: grayscale(100%);' : ''}
           }
-          @media print {
-            canvas {
-              page-break-after: always;
-              page-break-inside: avoid;
-            }
-          }
-          #pages { width: 100%; }
         </style>
       </head>
       <body>
         ${generateWatermarkHTML(safeMerchant)}
-        <div id="pages"></div>
+        ${contentHtml}
         <script>
           ${SECURITY_SCRIPT}
-          pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-          
-          async function renderAndPrint() {
-            try {
-              const pdf = await pdfjsLib.getDocument('${blobUrl}').promise;
-              const container = document.getElementById('pages');
-              
-              for (let i = 1; i <= pdf.numPages; i++) {
-                const page = await pdf.getPage(i);
-                const viewport = page.getViewport({ scale: 1.5 });
-                const canvas = document.createElement('canvas');
-                canvas.width = viewport.width;
-                canvas.height = viewport.height;
-                container.appendChild(canvas);
-                await page.render({ canvasContext: canvas.getContext('2d'), viewport: viewport }).promise;
-              }
-
-              setTimeout(function() {
-                window.focus();
-                window.print();
-              }, 400);
-            } catch (err) {
-              console.error('PDF print error:', err);
-              document.body.innerHTML = '<p style="color:red;padding:20px;">Failed to render PDF for printing.</p>';
-            }
-          }
-
-          renderAndPrint();
-          ${getAfterPrintScript(blobUrl, printId)}
+          window.onload = function() {
+            setTimeout(function() {
+              window.focus();
+              window.print();
+            }, 300);
+          };
+          ${getAfterPrintScript([...pageUrls, fallbackBlobUrl].filter(Boolean), printId)}
         </script>
       </body>
       </html>
@@ -327,7 +385,13 @@ export async function securePrintPDF(fileBlob, fileName, specs, merchantName, ex
     targetDoc.write(html);
     targetDoc.close();
 
-    monitorPrintCompletion({ targetWin, blobUrl, printId, iframeElem, resolve });
+    monitorPrintCompletion({
+      targetWin,
+      blobUrls: [...pageUrls, fallbackBlobUrl].filter(Boolean),
+      printId,
+      iframeElem,
+      resolve,
+    });
   });
 }
 
