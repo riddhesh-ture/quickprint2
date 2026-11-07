@@ -1,0 +1,5 @@
+{
+  "main": "print-server/dist/server.cjs",
+  "output": "print-server/dist/sea-prep.blob",
+  "disableExperimentalSEAWarning": true
+}

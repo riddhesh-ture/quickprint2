@@ -18,9 +18,11 @@ import {
 import { useNavigate, useOutletContext } from 'react-router-dom';
 import MerchantQueueList from '../components/MerchantView/MerchantQueueList';
 import MerchantHistoryDrawer from '../components/MerchantView/MerchantHistoryDrawer';
-import DocumentEditorModal from '../components/Editor/DocumentEditorModal';
 import { StatsOverview } from '../components/MerchantView/QuickStatCard';
 import ProcessingDialog from '../components/MerchantView/ProcessingDialog';
+
+// Lazy-load heavy PDF Document Editor Modal (only loaded on demand when opened on desktop)
+const DocumentEditorModal = React.lazy(() => import('../components/Editor/DocumentEditorModal'));
 import { useAuth } from '../hooks/useAuth';
 import { useCollection } from '../hooks/useSupabase';
 import { useMerchantRelay, playChime } from '../hooks/useMerchantRelay';
@@ -31,6 +33,7 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import HistoryIcon from '@mui/icons-material/History';
 import SecurityIcon from '@mui/icons-material/Security';
 import BoltIcon from '@mui/icons-material/Bolt';
+import PrintIcon from '@mui/icons-material/Print';
 
 export default function MerchantDashboardPage() {
   const { user, userData, loading } = useAuth();
@@ -88,6 +91,9 @@ export default function MerchantDashboardPage() {
     handleDelete,
     handleSaveJobEdits,
     handleRevertJobEdits,
+    daemonState,
+    refreshDaemonStatus,
+    selectPrinter,
   } = usePrintJobManager(merchantId, merchantName, pricePerPageBW, pricePerPageColor);
 
   // Separate active queue vs completed history
@@ -204,6 +210,39 @@ export default function MerchantDashboardPage() {
               variant="outlined"
               sx={{ fontWeight: 600, height: 22 }}
             />
+            <Tooltip
+              title={
+                daemonState.isOnline
+                  ? `Hardware daemon active on localhost:9123. Target: ${daemonState.selectedPrinter || 'Default'}. Click to configure.`
+                  : 'Local print daemon is offline. Printing uses browser dialog. Click to view instructions in Settings.'
+              }
+            >
+              <Chip
+                icon={<PrintIcon sx={{ fontSize: 14 }} />}
+                label={
+                  daemonState.checking
+                    ? 'Spooler...'
+                    : daemonState.isOnline
+                    ? `Local Spooler: ${daemonState.selectedPrinter || 'Connected'}`
+                    : 'Local Spooler: Offline'
+                }
+                color={daemonState.isOnline ? 'success' : 'default'}
+                size="small"
+                variant={daemonState.isOnline ? 'filled' : 'outlined'}
+                onClick={() => navigate('/merchant/settings')}
+                sx={{
+                  fontWeight: 600,
+                  height: 22,
+                  cursor: 'pointer',
+                  maxWidth: { xs: 160, sm: 260 },
+                  '& .MuiChip-label': {
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  },
+                }}
+              />
+            </Tooltip>
           </Stack>
         </Box>
 
@@ -263,17 +302,21 @@ export default function MerchantDashboardPage() {
       />
 
       {/* Document Editor Studio Modal - Desktop Only */}
-      <DocumentEditorModal
-        open={!isMobile && Boolean(editingDoc)}
-        onClose={() => setEditingDoc(null)}
-        job={editingDoc?.job}
-        fileIndex={editingDoc?.fileIndex || 0}
-        onSaveEdits={handleSaveJobEdits}
-        onRevertEdits={handleRevertJobEdits}
-        onPrintJob={handlePrint}
-        pricePerPageBW={pricePerPageBW}
-        pricePerPageColor={pricePerPageColor}
-      />
+      {!isMobile && Boolean(editingDoc) && (
+        <React.Suspense fallback={null}>
+          <DocumentEditorModal
+            open={true}
+            onClose={() => setEditingDoc(null)}
+            job={editingDoc?.job}
+            fileIndex={editingDoc?.fileIndex || 0}
+            onSaveEdits={handleSaveJobEdits}
+            onRevertEdits={handleRevertJobEdits}
+            onPrintJob={handlePrint}
+            pricePerPageBW={pricePerPageBW}
+            pricePerPageColor={pricePerPageColor}
+          />
+        </React.Suspense>
+      )}
 
       {/* Secure Processing Dialog */}
       <ProcessingDialog open={Boolean(processingJobId)} printProgress={printProgress} />

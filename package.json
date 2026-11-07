@@ -8,6 +8,9 @@
     "build": "vite build",
     "lint": "eslint .",
     "test": "node --test tests/*.test.js",
+    "test:daemon": "cd print-server && npm test",
+    "daemon": "node print-server/src/index.js",
+    "daemon:build-exe": "node scripts/build-exe.js",
     "preview": "vite preview"
   },
   "dependencies": {

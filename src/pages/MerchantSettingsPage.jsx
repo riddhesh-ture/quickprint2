@@ -2,7 +2,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Container, Typography, Box, Paper, TextField, Button, Grid,
-  Alert, Divider, InputAdornment, CircularProgress, Switch, FormControlLabel
+  Alert, Divider, InputAdornment, CircularProgress, Switch, FormControlLabel,
+  MenuItem, Chip, Stack, Tooltip, IconButton
 } from '@mui/material';
 import { QRCodeSVG } from 'qrcode.react';
 import SaveIcon from '@mui/icons-material/Save';
@@ -11,8 +12,20 @@ import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import StorefrontIcon from '@mui/icons-material/Storefront';
 import PaymentIcon from '@mui/icons-material/Payment';
 import QrCode2Icon from '@mui/icons-material/QrCode2';
+import PrintIcon from '@mui/icons-material/Print';
+import RefreshIcon from '@mui/icons-material/Refresh';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutlined';
+import ErrorOutlineIcon from '@mui/icons-material/ErrorOutlineOutlined';
 import { useAuth } from '../hooks/useAuth';
 import { upsertMerchantProfile } from '../supabase/db';
+import {
+  checkDaemonHealth,
+  fetchInstalledPrinters,
+  getStoredPrinter,
+  setStoredPrinter,
+  sendSilentPrintJob,
+  DAEMON_BASE_URL,
+} from '../utils/printDaemonClient';
 
 export default function MerchantSettingsPage() {
   const { user, userData, loading } = useAuth();
@@ -42,6 +55,77 @@ export default function MerchantSettingsPage() {
   }, []);
   
   const shopCode = userData?.shopCode || userData?.shop_code || '';
+
+  // Local hardware daemon state
+  const [daemonOnline, setDaemonOnline] = useState(false);
+  const [daemonChecking, setDaemonChecking] = useState(true);
+  const [installedPrinters, setInstalledPrinters] = useState([]);
+  const [selectedPrinter, setSelectedPrinter] = useState(getStoredPrinter() || '');
+  const [testPrintStatus, setTestPrintStatus] = useState(null);
+  const [testPrinting, setTestPrinting] = useState(false);
+
+  const loadDaemonInfo = async () => {
+    setDaemonChecking(true);
+    setTestPrintStatus(null);
+    try {
+      const health = await checkDaemonHealth();
+      if (health.online) {
+        setDaemonOnline(true);
+        const { printers, defaultPrinter } = await fetchInstalledPrinters();
+        setInstalledPrinters(printers);
+        const stored = getStoredPrinter();
+        const active = stored || defaultPrinter || printers[0]?.name || '';
+        setSelectedPrinter(active);
+      } else {
+        setDaemonOnline(false);
+      }
+    } catch (_err) {
+      setDaemonOnline(false);
+    } finally {
+      setDaemonChecking(false);
+    }
+  };
+
+  useEffect(() => {
+    loadDaemonInfo();
+  }, []);
+
+  const handlePrinterChange = (e) => {
+    const val = e.target.value;
+    setSelectedPrinter(val);
+    setStoredPrinter(val);
+  };
+
+  const handleTestPrint = async () => {
+    setTestPrinting(true);
+    setTestPrintStatus(null);
+    try {
+      // 1-page sample test PDF
+      const samplePdfBytes = '%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 400] >>\nendobj\nxref\n0 4\n0000000000 65535 f \n0000000009 00000 n \n0000000058 00000 n \n0000000115 00000 n \ntrailer\n<< /Size 4 /Root 1 0 R >>\nstartxref\n193\n%%EOF';
+      const testBlob = new Blob([samplePdfBytes], { type: 'application/pdf' });
+
+      await sendSilentPrintJob({
+        jobId: 'test_slip_' + Date.now(),
+        token: 'TEST',
+        fileBlob: testBlob,
+        fileName: 'quickprint_test_slip.pdf',
+        specs: { copies: 1, duplex: false, color: 'bw' },
+        printerName: selectedPrinter || undefined,
+      });
+
+      setTestPrintStatus({
+        type: 'success',
+        message: `Test print successfully spooled to "${selectedPrinter || 'default printer'}"!`,
+      });
+    } catch (err) {
+      setTestPrintStatus({
+        type: 'error',
+        message: `Test print failed: ${err.message}`,
+      });
+    } finally {
+      setTestPrinting(false);
+    }
+  };
 
   const [formData, setFormData] = useState({
     shopName: '',
@@ -353,6 +437,101 @@ export default function MerchantSettingsPage() {
               }
               label="Enable notifications for new print jobs"
             />
+          </Paper>
+
+          {/* Local Hardware Printing & Daemon */}
+          <Paper sx={{ p: 3, mt: 3 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2, flexWrap: 'wrap', gap: 1 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <PrintIcon color="primary" />
+                <Typography variant="h6">Local Hardware Printing (Silent Spooler)</Typography>
+              </Box>
+              <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                <Chip
+                  icon={daemonOnline ? <CheckCircleOutlineIcon sx={{ fontSize: 16 }} /> : <ErrorOutlineIcon sx={{ fontSize: 16 }} />}
+                  label={daemonChecking ? 'Checking...' : daemonOnline ? 'Daemon Online (Port 9123)' : 'Daemon Offline'}
+                  color={daemonOnline ? 'success' : 'default'}
+                  size="small"
+                  variant={daemonOnline ? 'filled' : 'outlined'}
+                  sx={{ fontWeight: 700 }}
+                />
+                <Tooltip title="Refresh daemon status and printer list">
+                  <span>
+                    <IconButton size="small" onClick={loadDaemonInfo} disabled={daemonChecking}>
+                      <RefreshIcon fontSize="small" />
+                    </IconButton>
+                  </span>
+                </Tooltip>
+              </Stack>
+            </Box>
+
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              The Local Node.js Print Daemon runs on this workstation to bypass browser print dialogs and spool jobs silently directly to your counter printers.
+            </Typography>
+
+            {daemonOnline ? (
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <TextField
+                  select
+                  label="Target Counter Printer"
+                  value={selectedPrinter}
+                  onChange={handlePrinterChange}
+                  fullWidth
+                  helperText="Select which physical or virtual printer silent jobs should be sent to"
+                >
+                  {installedPrinters.map((p) => (
+                    <MenuItem key={p.name} value={p.name}>
+                      {p.name} {p.isDefault ? ' (Default)' : ''} {p.status ? `• ${p.status}` : ''}
+                    </MenuItem>
+                  ))}
+                </TextField>
+
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
+                  <Button
+                    variant="outlined"
+                    startIcon={testPrinting ? <CircularProgress size={16} /> : <PrintIcon />}
+                    onClick={handleTestPrint}
+                    disabled={testPrinting || !selectedPrinter}
+                  >
+                    {testPrinting ? 'Sending Test...' : 'Send Test Print'}
+                  </Button>
+                  <Typography variant="caption" color="text.secondary">
+                    Prints a 1-page test receipt directly to verify hardware communication.
+                  </Typography>
+                </Box>
+
+                {testPrintStatus && (
+                  <Alert severity={testPrintStatus.type} sx={{ mt: 1 }}>
+                    {testPrintStatus.message}
+                  </Alert>
+                )}
+              </Box>
+            ) : (
+              <Alert severity="info" variant="outlined" sx={{ borderRadius: 2 }}>
+                <Typography variant="subtitle2" fontWeight={700} gutterBottom>
+                  How to start the Local Print Daemon:
+                </Typography>
+                <Typography variant="body2" sx={{ mb: 1 }}>
+                  Open a terminal in the QuickPrint directory on this workstation and run:
+                </Typography>
+                <Box
+                  sx={{
+                    bgcolor: 'action.hover',
+                    p: 1.5,
+                    borderRadius: 1,
+                    fontFamily: 'monospace',
+                    fontSize: '0.875rem',
+                    fontWeight: 600,
+                    mb: 1,
+                  }}
+                >
+                  npm run daemon
+                </Box>
+                <Typography variant="caption" color="text.secondary">
+                  While offline, QuickPrint automatically falls back to standard browser printing (securePrint iframe).
+                </Typography>
+              </Alert>
+            )}
           </Paper>
 
           <Box sx={{ mt: 3, display: 'flex', justifyContent: 'flex-end' }}>

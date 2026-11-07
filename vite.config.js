@@ -9,7 +9,7 @@ export default defineConfig({
     port: 5173,
   },
   build: {
-    chunkSizeWarningLimit: 600,
+    chunkSizeWarningLimit: 1600,
     rollupOptions: {
       output: {
         manualChunks(id) {
@@ -22,6 +22,9 @@ export default defineConfig({
             }
             if (id.includes('@supabase')) {
               return 'supabase-vendor';
+            }
+            if (id.includes('pdfjs-dist') || id.includes('react-pdf') || id.includes('pdf-lib')) {
+              return 'pdf-vendor';
             }
             // Put @mui and @emotion together before react match to avoid @emotion/react going into react-vendor
             if (id.includes('@mui') || id.includes('@emotion')) {

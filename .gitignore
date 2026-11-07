@@ -1,10 +1,12 @@
 # Dependencies and package manager output
 node_modules/
+print-server/node_modules/
 .pnpm-store/
 .pnpm-debug.log*
 
 # Build outputs
 /dist/
+print-server/dist/
 /dist-ssr/
 /build/
 /out/
@@ -35,14 +37,28 @@ lerna-debug.log*
 .cloudflare/
 .firebase/
 
-# Project-local planning / verification artifacts
+# Project documentation, presentation & planning artifacts (kept local / not for repo)
 PROGRESS.md
+progress.md
 plan.md
+SLIDE.md
+SLIDES.md
+slides.md
+SPEAKER_NOTES.md
+speaker_notes.md
 report.md
 QUICKPRINT_FINAL_MASTER_PLAN.md
+CONTEXT.md
+context.md
+WORKFLOW.md
+workflow.md
 user-flow/
 tests/
 supabase/migrations/
+
+# Compiled Standalone Executables
+*.exe
+quickprint.exe
 
 # Editor / OS files
 .vscode/*

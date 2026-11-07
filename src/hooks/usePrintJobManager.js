@@ -1,5 +1,4 @@
-// src/hooks/usePrintJobManager.js
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { updatePrintJob, deletePrintJob, confirmPaymentAndIncrementStats } from '../supabase/db';
 import { calculateBillablePages, getPdfPageCount } from '../utils/fileValidation';
 import {
@@ -9,11 +8,60 @@ import {
   getJobBlob,
 } from '../utils/localJobStorage';
 import { securePrint } from '../utils/securePrint';
+import {
+  checkDaemonHealth,
+  fetchInstalledPrinters,
+  sendSilentPrintJob,
+  getStoredPrinter,
+  setStoredPrinter,
+} from '../utils/printDaemonClient';
 
 export function usePrintJobManager(merchantId, merchantName, pricePerPageBW = 2, pricePerPageColor = 5) {
   const [processingJobId, setProcessingJobId] = useState(null);
   const [printProgress, setPrintProgress] = useState({ current: 0, total: 0, fileName: '', status: '' });
   const [actionNotice, setActionNotice] = useState(null);
+
+  // Local hardware print daemon state
+  const [daemonState, setDaemonState] = useState({
+    isOnline: false,
+    checking: true,
+    printers: [],
+    selectedPrinter: getStoredPrinter() || null,
+  });
+
+  const refreshDaemonStatus = useCallback(async () => {
+    setDaemonState((prev) => ({ ...prev, checking: true }));
+    const health = await checkDaemonHealth();
+    if (health.online) {
+      try {
+        const { printers, defaultPrinter } = await fetchInstalledPrinters();
+        const stored = getStoredPrinter();
+        const effectivePrinter = stored || defaultPrinter || (printers[0]?.name ?? null);
+        setDaemonState({
+          isOnline: true,
+          checking: false,
+          printers,
+          selectedPrinter: effectivePrinter,
+        });
+        return;
+      } catch (_e) {
+        setDaemonState((prev) => ({ ...prev, isOnline: true, checking: false }));
+        return;
+      }
+    }
+    setDaemonState((prev) => ({ ...prev, isOnline: false, checking: false }));
+  }, []);
+
+  useEffect(() => {
+    refreshDaemonStatus();
+    const interval = setInterval(refreshDaemonStatus, 25000);
+    return () => clearInterval(interval);
+  }, [refreshDaemonStatus]);
+
+  const selectPrinter = useCallback((printerName) => {
+    setStoredPrinter(printerName);
+    setDaemonState((prev) => ({ ...prev, selectedPrinter: printerName }));
+  }, []);
 
   const cleanupFiles = async (jobId) => {
     if (!jobId) return;
@@ -45,25 +93,48 @@ export function usePrintJobManager(merchantId, merchantName, pricePerPageBW = 2,
     }
 
     try {
-      // Direct system print: open browser/OS print dialogue for the files
+      const isDaemonActive = daemonState.isOnline;
+
+      // Direct system print: send to local daemon for silent spool or fallback to browser dialog
       for (let i = 0; i < job.files.length; i++) {
         const file = job.files[i];
-        setPrintProgress({
-          current: i + 1,
-          total: job.files.length,
-          fileName: file.name || `Document ${i + 1}`,
-          status: 'Opening system print dialog...',
-        });
-
         let blob = await getJobBlob(job.id, i);
         if (!blob && file.blob instanceof Blob) blob = file.blob;
         if (!blob && file.file instanceof Blob) blob = file.file;
 
         if (blob) {
-          try {
-            await securePrint(blob, file.name || 'document', file.specs || {}, merchantName);
-          } catch (printErr) {
-            console.warn('System print invocation note:', printErr);
+          if (isDaemonActive) {
+            setPrintProgress({
+              current: i + 1,
+              total: job.files.length,
+              fileName: file.name || `Document ${i + 1}`,
+              status: `Spooling silently to ${daemonState.selectedPrinter || 'counter printer'}...`,
+            });
+            try {
+              await sendSilentPrintJob({
+                jobId: `${job.id}_${i}`,
+                token: job.pin || job.tokenNumber,
+                fileBlob: blob,
+                fileName: file.name || `document_${i + 1}.pdf`,
+                specs: file.specs || {},
+                printerName: daemonState.selectedPrinter,
+              });
+            } catch (daemonErr) {
+              console.warn('Local daemon spooling failed, falling back to browser print:', daemonErr);
+              await securePrint(blob, file.name || 'document', file.specs || {}, merchantName);
+            }
+          } else {
+            setPrintProgress({
+              current: i + 1,
+              total: job.files.length,
+              fileName: file.name || `Document ${i + 1}`,
+              status: 'Opening system print dialog...',
+            });
+            try {
+              await securePrint(blob, file.name || 'document', file.specs || {}, merchantName);
+            } catch (printErr) {
+              console.warn('System print invocation note:', printErr);
+            }
           }
         }
       }
@@ -81,8 +152,9 @@ export function usePrintJobManager(merchantId, merchantName, pricePerPageBW = 2,
           ? String(job.tokenNumber).replace(/\D/g, '').slice(-4)
           : String(job.id).replace(/\D/g, '').slice(-4) || '----');
 
+      const printModeLabel = isDaemonActive ? 'spooled to printer' : 'printed';
       setActionNotice({
-        message: `Order #${pinDisplay} printed: ${totalPages} page(s) (₹${totalCost.toFixed(2)})`,
+        message: `Order #${pinDisplay} ${printModeLabel}: ${totalPages} page(s) (₹${totalCost.toFixed(2)})`,
         severity: 'success',
       });
     } catch (err) {
@@ -95,7 +167,7 @@ export function usePrintJobManager(merchantId, merchantName, pricePerPageBW = 2,
       setProcessingJobId(null);
       setPrintProgress({ current: 0, total: 0, fileName: '', status: '' });
     }
-  }, [pricePerPageBW, pricePerPageColor, merchantName]);
+  }, [pricePerPageBW, pricePerPageColor, merchantName, daemonState]);
 
   const handleDone = useCallback(async (job) => {
     if (!job) return;
@@ -306,5 +378,8 @@ export function usePrintJobManager(merchantId, merchantName, pricePerPageBW = 2,
     handleDelete,
     handleSaveJobEdits,
     handleRevertJobEdits,
+    daemonState,
+    refreshDaemonStatus,
+    selectPrinter,
   };
 }

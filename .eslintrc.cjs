@@ -7,7 +7,7 @@ module.exports = {
     'plugin:react/jsx-runtime',
     'plugin:react-hooks/recommended',
   ],
-  ignorePatterns: ['dist', '.eslintrc.cjs', 'cloudflare-worker', 'scripts'],
+  ignorePatterns: ['dist', '.eslintrc.cjs', 'cloudflare-worker', 'scripts', 'print-server'],
   parserOptions: { ecmaVersion: 'latest', sourceType: 'module' },
   settings: { react: { version: '18.2' } },
   plugins: ['react-refresh'],
