@@ -100,22 +100,22 @@ export default function MerchantSettingsPage() {
     setTestPrinting(true);
     setTestPrintStatus(null);
     try {
-      // 1-page sample test PDF
-      const samplePdfBytes = '%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 400] >>\nendobj\nxref\n0 4\n0000000000 65535 f \n0000000009 00000 n \n0000000058 00000 n \n0000000115 00000 n \ntrailer\n<< /Size 4 /Root 1 0 R >>\nstartxref\n193\n%%EOF';
-      const testBlob = new Blob([samplePdfBytes], { type: 'application/pdf' });
+      // 1-page completely blank white PDF page (standard A4 size 595 x 842 points)
+      const blankWhitePdf = '%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] >>\nendobj\nxref\n0 4\n0000000000 65535 f \n0000000009 00000 n \n0000000058 00000 n \n0000000115 00000 n \ntrailer\n<< /Size 4 /Root 1 0 R >>\nstartxref\n197\n%%EOF';
+      const testBlob = new Blob([blankWhitePdf], { type: 'application/pdf' });
 
       await sendSilentPrintJob({
         jobId: 'test_slip_' + Date.now(),
         token: 'TEST',
         fileBlob: testBlob,
-        fileName: 'quickprint_test_slip.pdf',
+        fileName: 'blank_test_page.pdf',
         specs: { copies: 1, duplex: false, color: 'bw' },
         printerName: selectedPrinter || undefined,
       });
 
       setTestPrintStatus({
         type: 'success',
-        message: `Test print successfully spooled to "${selectedPrinter || 'default printer'}"!`,
+        message: `Blank test page sent to "${selectedPrinter || 'default printer'}"!`,
       });
     } catch (err) {
       setTestPrintStatus({

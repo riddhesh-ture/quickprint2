@@ -1,5 +1,5 @@
 // src/components/MerchantView/ProcessingDialog.jsx
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -7,10 +7,22 @@ import {
   Typography,
   LinearProgress,
   Box,
+  Button,
 } from '@mui/material';
 import SecurityOutlinedIcon from '@mui/icons-material/SecurityOutlined';
 
-export default function ProcessingDialog({ open, printProgress }) {
+export default function ProcessingDialog({ open, printProgress, onCancel }) {
+  const [showCancel, setShowCancel] = useState(false);
+
+  useEffect(() => {
+    if (!open) {
+      setShowCancel(false);
+      return;
+    }
+    const timer = setTimeout(() => setShowCancel(true), 3500);
+    return () => clearTimeout(timer);
+  }, [open]);
+
   if (!open) return null;
 
   const current = printProgress?.current || 0;
@@ -42,12 +54,23 @@ export default function ProcessingDialog({ open, printProgress }) {
           </Typography>
         </Box>
 
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.5, mt: 1 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.5, mt: 1, mb: showCancel && onCancel ? 2 : 0 }}>
           <SecurityOutlinedIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
           <Typography variant="caption" color="text.secondary">
             Files stored locally and deleted upon completion
           </Typography>
         </Box>
+
+        {showCancel && onCancel && (
+          <Button
+            size="small"
+            color="inherit"
+            onClick={onCancel}
+            sx={{ mt: 2, textTransform: 'none', color: 'text.secondary' }}
+          >
+            Dismiss / Cancel
+          </Button>
+        )}
       </DialogContent>
     </Dialog>
   );

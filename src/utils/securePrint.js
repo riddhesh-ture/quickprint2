@@ -108,9 +108,22 @@ function generateWatermarkHTML(merchantName = 'QuickPrint') {
   `;
 }
 
+function isMobileDevice() {
+  if (typeof navigator === 'undefined') return false;
+  return /android|iphone|ipad|ipod/i.test(navigator.userAgent || '');
+}
+
 function resolvePrintTarget(existingWindow) {
   if (existingWindow && !existingWindow.closed) {
     return { targetWin: existingWindow, targetDoc: existingWindow.document, iframeElem: null };
+  }
+  if (isMobileDevice()) {
+    try {
+      const mobileWin = window.open('about:blank', '_blank');
+      if (mobileWin) {
+        return { targetWin: mobileWin, targetDoc: mobileWin.document, iframeElem: null };
+      }
+    } catch (_e) {}
   }
   const iframeElem = createPrintIframe();
   return { targetWin: iframeElem.contentWindow, targetDoc: iframeElem.contentWindow.document, iframeElem };

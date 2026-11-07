@@ -115,6 +115,7 @@ app.post('/print', async (req, res) => {
     duplex = 'simplex',
     color = 'bw',
     paperSize = 'A4',
+    pages = 'all',
     fileBuffer,
     fileName = 'document.pdf',
   } = req.body || {};
@@ -148,6 +149,7 @@ app.post('/print', async (req, res) => {
       duplex,
       color,
       paperSize,
+      pages,
     });
 
     recordJobStatus(jobId, 'completed', {

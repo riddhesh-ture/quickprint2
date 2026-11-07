@@ -119,6 +119,7 @@ export async function sendSilentPrintJob({
     duplex: duplexMode,
     color: colorMode,
     paperSize: specs.paperSize || 'A4',
+    pages: specs.pages || 'all',
     fileBuffer: base64Data,
     fileName,
   };

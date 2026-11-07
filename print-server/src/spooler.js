@@ -2,9 +2,28 @@
 import { exec, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import fs from 'node:fs';
+import path from 'node:path';
 
 const execPromise = promisify(exec);
 const execFilePromise = promisify(execFile);
+
+function getSumatraBinary() {
+  const dir = typeof __dirname !== 'undefined' ? __dirname : '';
+  const candidates = [
+    path.join(process.cwd(), 'SumatraPDF.exe'),
+    path.join(process.cwd(), 'bin', 'SumatraPDF.exe'),
+    path.join(process.cwd(), 'print-server', 'bin', 'SumatraPDF.exe'),
+    path.join(path.dirname(process.execPath), 'SumatraPDF.exe'),
+    ...(dir ? [path.join(dir, '..', 'bin', 'SumatraPDF.exe'), path.join(dir, 'SumatraPDF.exe')] : []),
+    path.join(process.cwd(), 'print-server', 'node_modules', 'pdf-to-printer', 'dist', 'SumatraPDF-3.4.6-32.exe'),
+  ];
+  for (const c of candidates) {
+    try {
+      if (c && fs.existsSync(c)) return c;
+    } catch (_e) {}
+  }
+  return null;
+}
 
 /**
  * Fallback virtual printer returned when no physical printers are detected
@@ -140,6 +159,7 @@ export async function spoolToPrinter({
   duplex = 'simplex',
   color = 'bw',
   paperSize = 'A4',
+  pages = 'all',
 }) {
   if (!filePath || !fs.existsSync(filePath)) {
     throw new Error(`Spool error: File does not exist at "${filePath}"`);
@@ -162,6 +182,7 @@ export async function spoolToPrinter({
       duplex,
       color,
       paperSize,
+      pages,
       mode: 'virtual-spool',
     };
   }
@@ -169,12 +190,72 @@ export async function spoolToPrinter({
   const isWindows = process.platform === 'win32';
 
   if (isWindows) {
-    // Windows silent spooling
-    // Sanitize parameters for PowerShell
+    // 1. Primary Windows Strategy: Silent SumatraPDF Engine
+    const sumatraExe = getSumatraBinary();
+    if (sumatraExe) {
+      const settings = [];
+
+      // Subset or range: 'odd', 'even', or '1-3'
+      if (pages && pages !== 'all') {
+        settings.push(pages);
+      }
+
+      // Color / Monochrome
+      if (color === 'bw') {
+        settings.push('monochrome');
+      } else if (color === 'color') {
+        settings.push('color');
+      }
+
+      // Copies
+      if (numCopies > 1) {
+        settings.push(`${numCopies}x`);
+      }
+
+      // Paper size
+      if (paperSize) {
+        settings.push(`paper=${paperSize.toLowerCase()}`);
+      }
+
+      // Duplex mode
+      if (duplex === 'long' || duplex === 'double') {
+        settings.push('duplex');
+      } else if (duplex === 'short') {
+        settings.push('duplexshort');
+      } else {
+        settings.push('simplex');
+      }
+
+      // Fit to printable bounds
+      settings.push('fit');
+
+      const args = ['-print-to', targetPrinter, '-silent'];
+      if (settings.length > 0) {
+        args.push('-print-settings', settings.join(','));
+      }
+      args.push(filePath);
+
+      try {
+        await execFilePromise(sumatraExe, args, { timeout: 35000 });
+        return {
+          success: true,
+          spooledTo: targetPrinter,
+          copies: numCopies,
+          duplex,
+          color,
+          paperSize,
+          pages,
+          mode: 'win32-sumatra',
+        };
+      } catch (sumatraErr) {
+        console.warn(`SumatraPDF spooling notice: ${sumatraErr.message}, falling back to PowerShell PrintTo`);
+      }
+    }
+
+    // 2. Windows Fallback: PowerShell PrintTo verb
     const escapedFile = filePath.replace(/"/g, '""');
     const escapedPrinter = targetPrinter.replace(/"/g, '""');
 
-    // PowerShell PrintTo verb silent execution
     const psCommand = `Start-Process -FilePath "${escapedFile}" -Verb PrintTo -ArgumentList '"${escapedPrinter}"' -WindowStyle Hidden -Wait`;
 
     try {
@@ -189,6 +270,7 @@ export async function spoolToPrinter({
         duplex,
         color,
         paperSize,
+        pages,
         mode: 'win32-print-to',
       };
     } catch (winErr) {

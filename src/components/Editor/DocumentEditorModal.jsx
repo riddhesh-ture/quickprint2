@@ -50,7 +50,9 @@ import AspectRatioIcon from '@mui/icons-material/AspectRatio';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import CropIcon from '@mui/icons-material/Crop';
 import PrintIcon from '@mui/icons-material/Print';
+import DescriptionIcon from '@mui/icons-material/Description';
 
+import mammoth from 'mammoth';
 import { Document, Page, pdfjs } from 'react-pdf';
 import { PDFDocument, degrees, StandardFonts, rgb } from 'pdf-lib';
 
@@ -156,13 +158,18 @@ export default function DocumentEditorModal({
   const [saving, setSaving] = useState(false);
   const [hasBackup, setHasBackup] = useState(false);
 
-  // Active file metadata
+  // Active file metadata & category
   const file = job?.files?.[fileIndex] || null;
-  const isPdf = useMemo(() => {
-    if (fileBlob) return getFileCategory(fileBlob) === 'pdf';
-    if (file) return getFileCategory(file) === 'pdf';
-    return false;
+  const fileCategory = useMemo(() => {
+    if (fileBlob) return getFileCategory(fileBlob);
+    if (file) return getFileCategory(file);
+    return 'unknown';
   }, [file, fileBlob]);
+
+  const isPdf = fileCategory === 'pdf';
+  const isDocx = fileCategory === 'document';
+  const isImage = fileCategory === 'image';
+  const [docxHtml, setDocxHtml] = useState('');
 
   // Viewport / Screen Zoom & Pager
   const [totalPages, setTotalPages] = useState(1);
@@ -191,6 +198,7 @@ export default function DocumentEditorModal({
   const [customScalePercent, setCustomScalePercent] = useState(100); // 50 to 200
 
   const [twoSided, setTwoSided] = useState(false);
+  const [manualDuplex, setManualDuplex] = useState(false);
   const [duplexFlip, setDuplexFlip] = useState('long'); // 'long' | 'short'
 
   const [headersFooters, setHeadersFooters] = useState(false);
@@ -207,12 +215,14 @@ export default function DocumentEditorModal({
     if (!open || !job || !file) {
       setFileBlob(null);
       setError(null);
+      setDocxHtml('');
       return;
     }
 
     let isMounted = true;
     setLoading(true);
     setError(null);
+    setDocxHtml('');
     setRotation(0);
     setScreenZoom(1.0);
     setCurrentPage(1);
@@ -224,7 +234,9 @@ export default function DocumentEditorModal({
 
     const initialSpecs = file.specs || {};
     setColorMode(initialSpecs.color === 'color' ? 'color' : 'bw');
-    setTwoSided(Boolean(initialSpecs.duplex || initialSpecs.sides === 'double'));
+    const isDouble = Boolean(initialSpecs.duplex || initialSpecs.sides === 'double');
+    setTwoSided(isDouble);
+    setManualDuplex(Boolean(initialSpecs.manualDuplex));
     setDuplexFlip(initialSpecs.duplexFlip || 'long');
     setCopies(parseInt(initialSpecs.copies, 10) || 1);
     setPaperSize(initialSpecs.paperSize || 'a4');
@@ -249,6 +261,23 @@ export default function DocumentEditorModal({
         }
 
         const backupExists = await hasOriginalJobBlob(job.id, fileIndex);
+
+        // Word document (.docx) parsing
+        const cat = getFileCategory(blob) || getFileCategory(file);
+        if (cat === 'document') {
+          try {
+            const arrayBuffer = await blob.arrayBuffer();
+            const result = await mammoth.convertToHtml({ arrayBuffer });
+            if (isMounted) {
+              setDocxHtml(result.value || '<p>Empty Word document</p>');
+            }
+          } catch (mErr) {
+            console.warn('Mammoth docx parse warning:', mErr);
+            if (isMounted) {
+              setDocxHtml('<p style="color:#666;">Preview not available for this Word document.</p>');
+            }
+          }
+        }
 
         if (isMounted) {
           setFileBlob(blob);
@@ -568,10 +597,12 @@ export default function DocumentEditorModal({
 
         const savedBytes = await outDoc.save();
         finalBlob = new Blob([savedBytes], { type: 'application/pdf' });
-      }
-
-      // 2. Image Prepress Assembly via Canvas
-      if (!isPdf) {
+      } else if (isDocx) {
+        // 2. Word (.docx) Direct Pass-Through
+        finalBlob = fileBlob;
+        finalPageCount = file.pageCount || file.specs?.pageCount || 1;
+      } else {
+        // 3. Image Prepress Assembly via Canvas
         finalBlob = await new Promise((resolve, reject) => {
           const img = new window.Image();
           const tempUrl = URL.createObjectURL(fileBlob);
@@ -629,6 +660,7 @@ export default function DocumentEditorModal({
         ...file.specs,
         color: colorMode,
         duplex: twoSided,
+        manualDuplex,
         duplexFlip,
         copies,
         paperSize,
@@ -869,7 +901,11 @@ export default function DocumentEditorModal({
             </Typography>
 
             {fileBlob && (
-              <Document file={fileBlob} loading={<CircularProgress size={16} sx={{ alignSelf: 'center', my: 2 }} />}>
+              <Document
+                file={fileBlob}
+                onLoadSuccess={onDocumentLoadSuccess}
+                loading={<CircularProgress size={16} sx={{ alignSelf: 'center', my: 2 }} />}
+              >
                 <Stack spacing={1.5}>
                   {Array.from({ length: totalPages }, (_, i) => {
                     const pageNum = i + 1;
@@ -972,6 +1008,7 @@ export default function DocumentEditorModal({
               {isPdf ? (
                 <Document
                   file={fileBlob}
+                  onLoadSuccess={onDocumentLoadSuccess}
                   loading={
                     <Stack spacing={2} alignItems="center" sx={{ my: 6 }}>
                       <CircularProgress size={32} sx={{ color: 'primary.light' }} />
@@ -1089,6 +1126,53 @@ export default function DocumentEditorModal({
                     })}
                   </Stack>
                 </Document>
+              ) : isDocx ? (
+                // Word (.docx) Prepress Stage
+                <Box
+                  sx={{
+                    width: layout === 'landscape' ? 620 : 440,
+                    minHeight: layout === 'landscape' ? 440 : 620,
+                    bgcolor: 'white',
+                    borderRadius: 1,
+                    boxShadow: '0 12px 36px rgba(0,0,0,0.7)',
+                    p: 4,
+                    color: '#1a1a1a',
+                    overflowY: 'auto',
+                    maxHeight: '75vh',
+                    fontFamily: 'Arial, sans-serif',
+                    fontSize: '0.9rem',
+                    lineHeight: 1.6,
+                    transform: `scale(${screenZoom})`,
+                    transformOrigin: 'top center',
+                    transition: 'transform 0.15s ease',
+                    '& p': { my: 1 },
+                    '& table': { borderCollapse: 'collapse', width: '100%', my: 2 },
+                    '& td, & th': { border: '1px solid #ccc', p: 1 },
+                    '& img': { maxWidth: '100%', height: 'auto' },
+                  }}
+                >
+                  <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 2, pb: 1.5, borderBottom: '1px solid #eee' }}>
+                    <DescriptionIcon color="primary" sx={{ fontSize: 32 }} />
+                    <Box sx={{ overflow: 'hidden' }}>
+                      <Typography variant="subtitle1" fontWeight="bold" noWrap>
+                        {file?.name || 'Word Document.docx'}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        Microsoft Word (.docx) • Prepress Preview
+                      </Typography>
+                    </Box>
+                  </Stack>
+                  {docxHtml ? (
+                    <Box dangerouslySetInnerHTML={{ __html: docxHtml }} />
+                  ) : (
+                    <Stack spacing={2} alignItems="center" sx={{ my: 8 }}>
+                      <CircularProgress size={30} />
+                      <Typography variant="caption" color="text.secondary">
+                        Rendering Word document preview...
+                      </Typography>
+                    </Stack>
+                  )}
+                </Box>
               ) : (
                 // Image Prepress Stage
                 <Box
@@ -1347,30 +1431,72 @@ export default function DocumentEditorModal({
                 )}
               </Box>
 
-              {/* Two-Sided (Duplex) */}
+              {/* Two-Sided (Duplex) matching Word counter options */}
               <Box>
-                <FormControlLabel
-                  control={<Checkbox checked={twoSided} onChange={(e) => setTwoSided(e.target.checked)} size="small" />}
-                  label={<Typography variant="body2" fontWeight="700">Print on both sides</Typography>}
-                />
-                {twoSided && (
-                  <RadioGroup
-                    value={duplexFlip}
-                    onChange={(e) => setDuplexFlip(e.target.value)}
-                    sx={{ pl: 3 }}
+                <Typography variant="caption" color="text.secondary" fontWeight="bold">
+                  PRINT SIDES / DUPLEX
+                </Typography>
+                <FormControl size="small" fullWidth sx={{ mt: 0.5 }}>
+                  <Select
+                    value={
+                      !twoSided
+                        ? 'simplex'
+                        : manualDuplex
+                        ? 'manual'
+                        : duplexFlip === 'short'
+                        ? 'short'
+                        : 'long'
+                    }
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === 'simplex') {
+                        setTwoSided(false);
+                        setManualDuplex(false);
+                      } else if (val === 'manual') {
+                        setTwoSided(true);
+                        setManualDuplex(true);
+                        setDuplexFlip('long');
+                      } else if (val === 'long') {
+                        setTwoSided(true);
+                        setManualDuplex(false);
+                        setDuplexFlip('long');
+                      } else if (val === 'short') {
+                        setTwoSided(true);
+                        setManualDuplex(false);
+                        setDuplexFlip('short');
+                      }
+                    }}
                   >
-                    <FormControlLabel
-                      value="long"
-                      control={<Radio size="small" />}
-                      label={<Typography variant="caption">Flip on long edge (booklet)</Typography>}
-                    />
-                    <FormControlLabel
-                      value="short"
-                      control={<Radio size="small" />}
-                      label={<Typography variant="caption">Flip on short edge (calendar)</Typography>}
-                    />
-                  </RadioGroup>
-                )}
+                    <MenuItem value="simplex">
+                      <Box>
+                        <Typography variant="body2" fontWeight="600">Print One Sided</Typography>
+                        <Typography variant="caption" color="text.secondary">Only print on one side of the page</Typography>
+                      </Box>
+                    </MenuItem>
+                    <MenuItem value="manual">
+                      <Box>
+                        <Typography variant="body2" fontWeight="600" color="primary.main">
+                          Manually Print on Both Sides
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          Reload paper when prompted to print second side
+                        </Typography>
+                      </Box>
+                    </MenuItem>
+                    <MenuItem value="long">
+                      <Box>
+                        <Typography variant="body2" fontWeight="600">Print on Both Sides (Auto)</Typography>
+                        <Typography variant="caption" color="text.secondary">Flip pages on long edge (booklet)</Typography>
+                      </Box>
+                    </MenuItem>
+                    <MenuItem value="short">
+                      <Box>
+                        <Typography variant="body2" fontWeight="600">Print on Both Sides (Auto)</Typography>
+                        <Typography variant="caption" color="text.secondary">Flip pages on short edge (calendar)</Typography>
+                      </Box>
+                    </MenuItem>
+                  </Select>
+                </FormControl>
               </Box>
 
               {/* Options: Headers & Footers */}

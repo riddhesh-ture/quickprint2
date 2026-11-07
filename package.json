@@ -21,6 +21,7 @@
     "@supabase/supabase-js": "^2.86.2",
     "firebase": "^10.12.2",
     "html5-qrcode": "^2.3.8",
+    "mammoth": "^1.13.0",
     "pdf-lib": "^1.17.1",
     "qrcode.react": "^3.2.0",
     "react": "^18.3.1",

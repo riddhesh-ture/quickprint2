@@ -46,6 +46,13 @@ execSync(`node --experimental-sea-config "${SEA_CONFIG}"`, { stdio: 'inherit' })
 console.log('3/4 Copying base Windows executable...');
 fs.copyFileSync(process.execPath, OUTPUT_EXE);
 
+// Ensure SumatraPDF.exe is present next to quickprint.exe for silent printing
+const sumatraSrc = path.join(ROOT_DIR, 'print-server', 'bin', 'SumatraPDF.exe');
+const sumatraDest = path.join(ROOT_DIR, 'SumatraPDF.exe');
+if (fs.existsSync(sumatraSrc)) {
+  fs.copyFileSync(sumatraSrc, sumatraDest);
+}
+
 // 6. Inject blob using postject
 console.log('4/4 Injecting payload into quickprint.exe...');
 execSync(

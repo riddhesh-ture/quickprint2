@@ -20,6 +20,7 @@ import MerchantQueueList from '../components/MerchantView/MerchantQueueList';
 import MerchantHistoryDrawer from '../components/MerchantView/MerchantHistoryDrawer';
 import { StatsOverview } from '../components/MerchantView/QuickStatCard';
 import ProcessingDialog from '../components/MerchantView/ProcessingDialog';
+import ManualDuplexModal from '../components/MerchantView/ManualDuplexModal';
 
 // Lazy-load heavy PDF Document Editor Modal (only loaded on demand when opened on desktop)
 const DocumentEditorModal = React.lazy(() => import('../components/Editor/DocumentEditorModal'));
@@ -86,6 +87,8 @@ export default function MerchantDashboardPage() {
     printProgress,
     actionNotice,
     clearActionNotice,
+    manualDuplexPrompt,
+    closeManualDuplexPrompt,
     handlePrint,
     handleDone,
     handleDelete,
@@ -319,7 +322,22 @@ export default function MerchantDashboardPage() {
       )}
 
       {/* Secure Processing Dialog */}
-      <ProcessingDialog open={Boolean(processingJobId)} printProgress={printProgress} />
+      <ProcessingDialog
+        open={Boolean(processingJobId)}
+        printProgress={printProgress}
+        onCancel={() => window.location.reload()}
+      />
+
+      {/* Manual Duplex Paper Reload Modal (Canon G3030 / G3730 single-sided support) */}
+      <ManualDuplexModal
+        open={Boolean(manualDuplexPrompt)}
+        onClose={closeManualDuplexPrompt}
+        onContinue={manualDuplexPrompt?.onContinue}
+        jobPin={manualDuplexPrompt?.jobPin}
+        fileName={manualDuplexPrompt?.fileName}
+        printerName={manualDuplexPrompt?.printerName}
+        totalPages={manualDuplexPrompt?.totalPages}
+      />
 
       {/* Feedback Toast */}
       <Snackbar
