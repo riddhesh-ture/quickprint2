@@ -85,6 +85,8 @@ sea-config.json
 # Compiled Standalone Executables
 *.exe
 quickprint.exe
+quickprint-driver.exe
+QuickPrint.exe
 
 # Editor / OS files
 .vscode/*

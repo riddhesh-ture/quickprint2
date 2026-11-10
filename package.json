@@ -51,7 +51,7 @@
   },
   "build": {
     "appId": "com.quickprint.merchant",
-    "productName": "QuickPrint Merchant Terminal",
+    "productName": "QuickPrint",
     "directories": {
       "output": "release"
     },
@@ -67,6 +67,7 @@
       }
     ],
     "win": {
+      "artifactName": "QuickPrint.exe",
       "target": [
         "portable"
       ]

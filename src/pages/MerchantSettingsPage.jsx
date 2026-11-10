@@ -555,10 +555,10 @@ export default function MerchantSettingsPage() {
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                 <Alert severity="info" variant="outlined" sx={{ borderRadius: 2 }}>
                   <Typography variant="subtitle2" fontWeight={700} gutterBottom>
-                    Standalone QuickPrint Daemon (.exe):
+                    Standalone QuickPrint Driver (.exe):
                   </Typography>
                   <Typography variant="body2" sx={{ mb: 1 }}>
-                    Run <strong>quickprint.exe</strong> on this workstation to enable zero-dialog silent hardware printing.
+                    Run <strong>quickprint-driver.exe</strong> on this workstation to enable zero-dialog silent hardware printing.
                   </Typography>
                   <Typography variant="caption" color="text.secondary">
                     While offline, QuickPrint seamlessly uses standard browser printing.

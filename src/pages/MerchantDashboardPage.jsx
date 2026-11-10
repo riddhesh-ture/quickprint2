@@ -233,22 +233,22 @@ export default function MerchantDashboardPage() {
             <Tooltip
               title={
                 isDesktopApp
-                  ? `Desktop Terminal active. Direct hardware link to: ${daemonState.selectedPrinter || 'Default Printer'}. Click to configure.`
+                  ? `QuickPrint Desktop active. Direct hardware link to: ${daemonState.selectedPrinter || 'Default Printer'}. Click to configure.`
                   : daemonState.isOnline
-                  ? `Hardware daemon active on localhost:9123. Target: ${daemonState.selectedPrinter || 'Default'}. Click to configure.`
-                  : 'Local print daemon is offline. Printing uses browser dialog. Click to view instructions in Settings.'
+                  ? `Hardware driver active on localhost:9123. Target: ${daemonState.selectedPrinter || 'Default'}. Click to configure.`
+                  : 'Local print driver is offline. Printing uses browser dialog. Click to view instructions in Settings.'
               }
             >
               <Chip
                 icon={<PrintIcon sx={{ fontSize: 14 }} />}
                 label={
                   isDesktopApp
-                    ? `Terminal: ${daemonState.selectedPrinter || 'Ready'}`
+                    ? `QuickPrint: ${daemonState.selectedPrinter || 'Ready'}`
                     : daemonState.checking
-                    ? 'Spooler...'
+                    ? 'Driver...'
                     : daemonState.isOnline
-                    ? `Local Spooler: ${daemonState.selectedPrinter || 'Connected'}`
-                    : 'Local Spooler: Offline'
+                    ? `Driver: ${daemonState.selectedPrinter || 'Connected'}`
+                    : 'Driver: Offline'
                 }
                 color={daemonState.isOnline || isDesktopApp ? 'success' : 'default'}
                 size="small"
