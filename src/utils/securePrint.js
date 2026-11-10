@@ -1,5 +1,6 @@
 // src/utils/securePrint.js
 import { pdfjs } from 'react-pdf';
+import { PDFDocument } from 'pdf-lib';
 
 // Configure bundled PDF.js worker
 if (typeof window !== 'undefined' && !pdfjs.GlobalWorkerOptions.workerSrc) {
@@ -96,9 +97,17 @@ const SECURITY_CSS = `
     margin: 0;
     padding: 20px;
     background: white;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
   }
   @media print {
-    body { background: white; }
+    body {
+      background: white;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+      color-adjust: exact !important;
+    }
     .no-print { display: none !important; }
   }
 `;
@@ -212,6 +221,97 @@ function monitorPrintCompletion({ targetWin, blobUrls, printId, iframeElem, reso
 }
 
 /**
+ * Convert any image Blob (PNG, JPG, WEBP, etc.) into a standardized A4 PDF Blob.
+ * Embeds image at full native resolution and proportional page fit, avoiding browser
+ * CSS layout downsampling so prints are crisp, rich, and never faint.
+ */
+export async function convertImageToPdf(imageBlob) {
+  if (!imageBlob) return null;
+  const pdfDoc = await PDFDocument.create();
+  const arrayBuffer = await imageBlob.arrayBuffer();
+
+  let embeddedImage = null;
+  const type = (imageBlob.type || '').toLowerCase();
+
+  // Try direct embed for PNG / JPEG
+  if (type.includes('png')) {
+    try {
+      embeddedImage = await pdfDoc.embedPng(arrayBuffer);
+    } catch (_err) {
+      embeddedImage = null;
+    }
+  } else if (type.includes('jpeg') || type.includes('jpg')) {
+    try {
+      embeddedImage = await pdfDoc.embedJpg(arrayBuffer);
+    } catch (_err) {
+      embeddedImage = null;
+    }
+  }
+
+  // Fallback for WebP, GIF, or progressive JPEG: draw to offscreen canvas to get clean PNG bytes
+  if (!embeddedImage) {
+    const imgUrl = URL.createObjectURL(imageBlob);
+    try {
+      const img = new Image();
+      await new Promise((res, rej) => {
+        img.onload = res;
+        img.onerror = rej;
+        img.src = imgUrl;
+      });
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth || img.width;
+      canvas.height = img.naturalHeight || img.height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+      const pngBlob = await new Promise((res) => canvas.toBlob(res, 'image/png'));
+      const pngBuffer = await pngBlob.arrayBuffer();
+      embeddedImage = await pdfDoc.embedPng(pngBuffer);
+      canvas.width = 0;
+      canvas.height = 0;
+    } finally {
+      URL.revokeObjectURL(imgUrl);
+    }
+  }
+
+  if (!embeddedImage) {
+    throw new Error('Unable to embed image into PDF container');
+  }
+
+  // Standard A4 dimensions in points (72 points per inch)
+  const A4_WIDTH = 595.28;
+  const A4_HEIGHT = 841.89;
+
+  const imgWidth = embeddedImage.width;
+  const imgHeight = embeddedImage.height;
+  const isLandscape = imgWidth > imgHeight;
+
+  const pageWidth = isLandscape ? A4_HEIGHT : A4_WIDTH;
+  const pageHeight = isLandscape ? A4_WIDTH : A4_HEIGHT;
+
+  // Fit image within printable margins (20pt padding) preserving exact aspect ratio
+  const margin = 20;
+  const maxWidth = pageWidth - margin * 2;
+  const maxHeight = pageHeight - margin * 2;
+  const scale = Math.min(maxWidth / imgWidth, maxHeight / imgHeight, 1);
+
+  const drawWidth = imgWidth * scale;
+  const drawHeight = imgHeight * scale;
+  const x = (pageWidth - drawWidth) / 2;
+  const y = (pageHeight - drawHeight) / 2;
+
+  const page = pdfDoc.addPage([pageWidth, pageHeight]);
+  page.drawImage(embeddedImage, {
+    x,
+    y,
+    width: drawWidth,
+    height: drawHeight,
+  });
+
+  const pdfBytes = await pdfDoc.save();
+  return new Blob([pdfBytes], { type: 'application/pdf' });
+}
+
+/**
  * Securely print an Image file using ObjectURL (zero base64 overhead)
  */
 export async function securePrintImage(fileBlob, fileName, specs, merchantName, existingWindow = null) {
@@ -231,10 +331,30 @@ export async function securePrintImage(fileBlob, fileName, specs, merchantName, 
         <title>Print - ${safeFileName}</title>
         <style>
           ${SECURITY_CSS}
+          @page {
+            margin: 0;
+            size: auto;
+          }
+          body {
+            margin: 0;
+            padding: 0;
+            background: white;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+          }
           img {
-            max-width: 100%;
+            max-width: 95%;
+            max-height: 95vh;
+            object-fit: contain;
             display: block;
-            margin: 0 auto;
+            margin: auto;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            color-adjust: exact !important;
+            image-rendering: -webkit-optimize-contrast;
+            image-rendering: high-quality;
             ${!isColor ? 'filter: grayscale(100%);' : ''}
           }
         </style>
@@ -288,19 +408,30 @@ export async function securePrintPDF(fileBlob, fileName, specs, merchantName, ex
     const pdf = await loadingTask.promise;
     const numPages = pdf.numPages;
 
+    // High-resolution print scale: Standard PDF is 72 DPI. Scale 3.0 produces ~216 DPI
+    // (1785 x 2526 px for A4), providing razor-sharp font strokes and deep black lines
+    // matching native mobile apps without exceeding browser canvas limits.
+    const PRINT_SCALE = 3.0;
+
     for (let i = 1; i <= numPages; i++) {
       const page = await pdf.getPage(i);
-      const viewport = page.getViewport({ scale: 1.5 });
+      const viewport = page.getViewport({ scale: PRINT_SCALE });
       const canvas = document.createElement('canvas');
       canvas.width = viewport.width;
       canvas.height = viewport.height;
       const ctx = canvas.getContext('2d');
       await page.render({ canvasContext: ctx, viewport }).promise;
 
-      const pageBlob = await new Promise((res) => canvas.toBlob(res, 'image/jpeg', 0.95));
+      // 100% original fidelity: zero manual pixel tampering or artificial curves.
+      // High-resolution vector render exported directly to lossless PNG.
+      const pageBlob = await new Promise((res) => canvas.toBlob(res, 'image/png'));
       if (pageBlob) {
         pageUrls.push(URL.createObjectURL(pageBlob));
       }
+
+      // Immediately free canvas memory buffer
+      canvas.width = 0;
+      canvas.height = 0;
     }
     loadingTask.destroy();
   } catch (err) {
@@ -359,8 +490,14 @@ export async function securePrintPDF(fileBlob, fileName, specs, merchantName, ex
           .page-img {
             width: 100%;
             max-width: 100%;
+            height: auto;
             display: block;
-            ${!isColor ? 'filter: grayscale(100%);' : ''}
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            color-adjust: exact !important;
+            image-rendering: -webkit-optimize-contrast;
+            image-rendering: crisp-edges;
+            image-rendering: high-quality;
           }
         </style>
       </head>
@@ -421,6 +558,9 @@ export async function securePrintDOCX(fileBlob, fileName, specs, merchantName, e
             margin: 0 auto;
             font-family: Arial, sans-serif;
             line-height: 1.6;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            color-adjust: exact !important;
             ${!isColor ? 'filter: grayscale(100%);' : ''}
           }
         </style>
@@ -471,7 +611,13 @@ export async function securePrint(fileBlob, fileName, specs, merchantName = 'Qui
   }
   
   if (mimeType.startsWith('image/') || ['jpg', 'jpeg', 'png', 'webp'].includes(extension)) {
-    return securePrintImage(fileBlob, fileName, specs, merchantName, existingWindow);
+    try {
+      const pdfBlob = await convertImageToPdf(fileBlob);
+      return securePrintPDF(pdfBlob, `${fileName}.pdf`, specs, merchantName, existingWindow);
+    } catch (err) {
+      console.warn('Image to PDF conversion notice, using direct image print:', err);
+      return securePrintImage(fileBlob, fileName, specs, merchantName, existingWindow);
+    }
   }
   
   if (mimeType.includes('wordprocessingml') || mimeType === 'application/msword' || ['doc', 'docx'].includes(extension)) {

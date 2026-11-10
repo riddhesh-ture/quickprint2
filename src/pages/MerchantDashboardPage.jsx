@@ -1,5 +1,5 @@
 // src/pages/MerchantDashboardPage.jsx
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   Container,
   Typography,
@@ -100,6 +100,21 @@ export default function MerchantDashboardPage() {
     selectPrinter,
   } = usePrintJobManager(merchantId, merchantName, pricePerPageBW, pricePerPageColor);
 
+  // Optimistic tracking for instant queue removal upon Done / Delete
+  const [removedJobIds, setRemovedJobIds] = useState(() => new Set());
+
+  const onDoneJob = useCallback((job) => {
+    if (!job?.id) return;
+    setRemovedJobIds((prev) => new Set(prev).add(job.id));
+    handleDone(job);
+  }, [handleDone]);
+
+  const onDeleteJob = useCallback((jobId) => {
+    if (!jobId) return;
+    setRemovedJobIds((prev) => new Set(prev).add(jobId));
+    handleDelete(jobId);
+  }, [handleDelete]);
+
   // Separate active queue vs completed history
   const { activeJobs, completedJobs } = useMemo(() => {
     const list = jobs || [];
@@ -107,7 +122,7 @@ export default function MerchantDashboardPage() {
     const completed = [];
 
     for (const j of list) {
-      if (j.status === 'completed' || j.status === 'paid') {
+      if (removedJobIds.has(j.id) || j.status === 'completed' || j.status === 'paid') {
         completed.push(j);
       } else if (j.status !== 'cancelled') {
         active.push(j);
@@ -115,7 +130,7 @@ export default function MerchantDashboardPage() {
     }
 
     return { activeJobs: active, completedJobs: completed };
-  }, [jobs]);
+  }, [jobs, removedJobIds]);
 
   // Audio chime on new incoming job in queue
   const prevCountRef = useRef(null);
@@ -157,7 +172,7 @@ export default function MerchantDashboardPage() {
         e.preventDefault();
         const topJob = activeJobs[0];
         if (topJob.status === 'printed' || topJob.status === 'awaitingPayment') {
-          handleDone(topJob);
+          onDoneJob(topJob);
         } else {
           handlePrint(topJob);
         }
@@ -165,7 +180,7 @@ export default function MerchantDashboardPage() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activeJobs, processingJobId, handleDone, handlePrint]);
+  }, [activeJobs, processingJobId, onDoneJob, handlePrint]);
 
   if (loading || !userData) {
     return (
@@ -285,8 +300,8 @@ export default function MerchantDashboardPage() {
       <MerchantQueueList
         jobs={activeJobs}
         onPrint={handlePrint}
-        onDone={handleDone}
-        onDelete={handleDelete}
+        onDone={onDoneJob}
+        onDelete={onDeleteJob}
         onEdit={(job, fileIndex = 0) => {
           if (!isMobile) {
             setEditingDoc({ job, fileIndex });
@@ -302,7 +317,7 @@ export default function MerchantDashboardPage() {
         onClose={() => setHistoryOpen(false)}
         completedJobs={completedJobs}
         onReprint={handlePrint}
-        onDelete={handleDelete}
+        onDelete={onDeleteJob}
       />
 
       {/* Document Editor Studio Modal - Desktop Only */}

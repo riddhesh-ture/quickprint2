@@ -46,6 +46,7 @@ export default function App() {
             <Route path="/merchant/signup" element={<SignupPage />} />
             <Route element={<MerchantProtectedRoute />}>
               <Route element={<MerchantLayout />}>
+                <Route path="/merchant" element={<Navigate to="/merchant/dashboard" replace />} />
                 <Route path="/merchant/dashboard" element={<MerchantDashboardPage />} />
                 <Route path="/merchant/analytics" element={<MerchantAnalyticsPage />} />
                 <Route path="/merchant/settings" element={<MerchantSettingsPage />} />

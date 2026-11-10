@@ -1,6 +1,6 @@
-# Dependencies and package manager output
+# Local hardware print server daemon & dependencies
+print-server/
 node_modules/
-print-server/node_modules/
 .pnpm-store/
 .pnpm-debug.log*
 

@@ -7,7 +7,7 @@ import {
   revertJobBlob,
   getJobBlob,
 } from '../utils/localJobStorage';
-import { securePrint } from '../utils/securePrint';
+import { securePrint, convertImageToPdf } from '../utils/securePrint';
 import { slicePdfPages } from '../utils/pdfSlicer';
 import {
   checkDaemonHealth,
@@ -113,8 +113,8 @@ export function usePrintJobManager(merchantId, merchantName, pricePerPageBW = 2,
 
         const printModeLabel = isDaemonActive ? 'spooled to printer' : 'printed';
         setActionNotice({
-          message: `Order #${pinDisplay} ${printModeLabel}: ${totalPages} page(s) (₹${totalCost.toFixed(2)})`,
-          severity: 'success',
+          message: `Order #${pinDisplay} ${printModeLabel}: ${totalPages} page(s). Verify customer payment before completing.`,
+          severity: 'info',
         });
       } catch (err) {
         console.error('Error completing print job status:', err);
@@ -246,11 +246,23 @@ export function usePrintJobManager(merchantId, merchantName, pricePerPageBW = 2,
           status: `Spooling silently to ${activePrinter}...`,
         });
         try {
+          const isImage = file.name?.match(/\.(jpg|jpeg|png|webp|gif|bmp)$/i) || blob.type?.startsWith('image/');
+          let printableBlob = blob;
+          let printableName = file.name || `document_${index + 1}.pdf`;
+          if (isImage) {
+            try {
+              printableBlob = await convertImageToPdf(blob);
+              printableName = `${file.name || 'image'}.pdf`;
+            } catch (convErr) {
+              console.warn('Image PDF wrapper notice:', convErr);
+            }
+          }
+
           await sendSilentPrintJob({
             jobId: `${job.id}_${index}`,
             token: job.pin || job.tokenNumber,
-            fileBlob: blob,
-            fileName: file.name || `document_${index + 1}.pdf`,
+            fileBlob: printableBlob,
+            fileName: printableName,
             specs: file.specs || {},
             printerName: daemonState.selectedPrinter,
           });
@@ -348,7 +360,7 @@ export function usePrintJobManager(merchantId, merchantName, pricePerPageBW = 2,
       await cleanupFiles(job.id);
       const pinDisplay = job.pin || (job.tokenNumber ? String(job.tokenNumber).replace(/\D/g, '').slice(-4) : (String(job.id).replace(/\D/g, '').slice(-4) || '----'));
       setActionNotice({
-        message: `Order #${pinDisplay} completed`,
+        message: `Order #${pinDisplay} completed & payment confirmed`,
         severity: 'success',
       });
     } catch (e) {
@@ -358,7 +370,6 @@ export function usePrintJobManager(merchantId, merchantName, pricePerPageBW = 2,
   }, [merchantId]);
 
   const handleDelete = useCallback(async (jobId) => {
-    if (!window.confirm('Delete this print job?')) return;
     try {
       await deletePrintJob(jobId);
       await cleanupFiles(jobId);
