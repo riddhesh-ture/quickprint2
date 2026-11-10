@@ -42,6 +42,7 @@ export default function MerchantDashboardPage() {
   const outletCtx = useOutletContext();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isDesktopApp = typeof window !== 'undefined' && Boolean(window.quickprintDesktop?.isDesktop);
 
   const [historyOpen, setHistoryOpen] = useState(false);
   const [editingDoc, setEditingDoc] = useState(null); // { job, fileIndex }
@@ -231,7 +232,9 @@ export default function MerchantDashboardPage() {
             />
             <Tooltip
               title={
-                daemonState.isOnline
+                isDesktopApp
+                  ? `Desktop Terminal active. Direct hardware link to: ${daemonState.selectedPrinter || 'Default Printer'}. Click to configure.`
+                  : daemonState.isOnline
                   ? `Hardware daemon active on localhost:9123. Target: ${daemonState.selectedPrinter || 'Default'}. Click to configure.`
                   : 'Local print daemon is offline. Printing uses browser dialog. Click to view instructions in Settings.'
               }
@@ -239,15 +242,17 @@ export default function MerchantDashboardPage() {
               <Chip
                 icon={<PrintIcon sx={{ fontSize: 14 }} />}
                 label={
-                  daemonState.checking
+                  isDesktopApp
+                    ? `Terminal: ${daemonState.selectedPrinter || 'Ready'}`
+                    : daemonState.checking
                     ? 'Spooler...'
                     : daemonState.isOnline
                     ? `Local Spooler: ${daemonState.selectedPrinter || 'Connected'}`
                     : 'Local Spooler: Offline'
                 }
-                color={daemonState.isOnline ? 'success' : 'default'}
+                color={daemonState.isOnline || isDesktopApp ? 'success' : 'default'}
                 size="small"
-                variant={daemonState.isOnline ? 'filled' : 'outlined'}
+                variant={daemonState.isOnline || isDesktopApp ? 'filled' : 'outlined'}
                 onClick={() => navigate('/merchant/settings')}
                 sx={{
                   fontWeight: 600,

@@ -6,6 +6,7 @@ node_modules/
 
 # Build outputs
 /dist/
+release/
 print-server/dist/
 /dist-ssr/
 /build/
@@ -30,6 +31,7 @@ lerna-debug.log*
 # Local environment variables
 .env
 .env.*
+.env.example
 *.local
 
 # Cloudflare / deployment tooling
@@ -72,7 +74,13 @@ context.md
 WORKFLOW.md
 workflow.md
 user-flow/
-supabase/migrations/
+# Proprietary backend infrastructure & desktop binaries
+.git1/
+electron/
+cloudflare-worker/
+supabase/
+sea-config.json
+.github/workflows/
 
 # Compiled Standalone Executables
 *.exe
