@@ -1,9 +1,9 @@
 // src/pages/MerchantSettingsPage.jsx
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Container, Typography, Box, Paper, TextField, Button, Grid,
   Alert, Divider, InputAdornment, CircularProgress, Switch, FormControlLabel,
-  MenuItem, Chip, Stack, Tooltip, IconButton
+  MenuItem, Chip, Stack, Tooltip, IconButton, useTheme, useMediaQuery,
 } from '@mui/material';
 import { QRCodeSVG } from 'qrcode.react';
 import SaveIcon from '@mui/icons-material/Save';
@@ -24,13 +24,12 @@ import {
   getStoredPrinter,
   setStoredPrinter,
   sendSilentPrintJob,
-  DAEMON_BASE_URL,
 } from '../utils/printDaemonClient';
 import { generateTestSlipPdf } from '../utils/testSlipGenerator';
 import { securePrint } from '../utils/securePrint';
 
 export default function MerchantSettingsPage() {
-  const { user, userData, loading } = useAuth();
+  const { user, userData, loading, setProfile, refreshProfile } = useAuth();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const [saving, setSaving] = useState(false);
@@ -194,12 +193,17 @@ export default function MerchantSettingsPage() {
       setValidationError('Owner name is required.');
       return;
     }
-    const cleanPhone = (formData.phone || '').replace(/\D/g, '');
+    let cleanPhone = String(formData.phone || '').replace(/\D/g, '');
+    if (cleanPhone.length === 12 && cleanPhone.startsWith('91')) {
+      cleanPhone = cleanPhone.slice(2);
+    } else if (cleanPhone.length === 11 && cleanPhone.startsWith('0')) {
+      cleanPhone = cleanPhone.slice(1);
+    }
     if (cleanPhone.length !== 10) {
       setValidationError('Please enter a valid 10-digit mobile number.');
       return;
     }
-    const cleanPincode = (formData.pincode || '').replace(/\D/g, '');
+    const cleanPincode = String(formData.pincode || '').replace(/\D/g, '');
     if (cleanPincode.length !== 6) {
       setValidationError('Please enter a valid 6-digit pincode.');
       return;
@@ -219,9 +223,15 @@ export default function MerchantSettingsPage() {
       return;
     }
 
+    const merchantId = user?.uid || userData?.id;
+    if (!merchantId) {
+      setValidationError('Merchant session not found. Please log in again.');
+      return;
+    }
+
     setSaving(true);
     try {
-      await upsertMerchantProfile(user.uid, {
+      const updated = await upsertMerchantProfile(merchantId, {
         ...formData,
         phone: cleanPhone,
         pincode: parseInt(cleanPincode, 10) || null,
@@ -229,6 +239,15 @@ export default function MerchantSettingsPage() {
         pricePerPageBW: priceBW,
         pricePerPageColor: priceColor,
       });
+
+      // Synchronize global auth context and local storage session
+      const merged = { ...userData, ...formData, ...updated };
+      if (setProfile) {
+        setProfile(merged);
+      } else if (refreshProfile) {
+        await refreshProfile(merchantId);
+      }
+
       setIsDirty(false);
       setSuccess(true);
       setSafeTimeout(() => setSuccess(false), 3000);
@@ -527,7 +546,7 @@ export default function MerchantSettingsPage() {
                     Mobile Printing Active
                   </Typography>
                   <Typography variant="body2">
-                    Prints are sent directly to your phone's native Android/iOS print dialog with automatic odd/even page splitting for manual duplexing. No desktop daemon needed!
+                    Prints are sent directly to your phone&apos;s native Android/iOS print dialog with automatic odd/even page splitting for manual duplexing. No desktop daemon needed!
                   </Typography>
                 </Alert>
 
@@ -541,7 +560,7 @@ export default function MerchantSettingsPage() {
                     {testPrinting ? 'Opening Test...' : 'Test Mobile Print'}
                   </Button>
                   <Typography variant="caption" color="text.secondary">
-                    Opens the universal diagnostic test slip in your phone's native print spooler.
+                    Opens the universal diagnostic test slip in your phone&apos;s native print spooler.
                   </Typography>
                 </Box>
 
