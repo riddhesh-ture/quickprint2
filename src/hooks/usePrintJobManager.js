@@ -489,7 +489,13 @@ export function usePrintJobManager(merchantId, merchantName, pricePerPageBW = 2,
         throw err;
       }
     },
-    [pricePerPageBW, pricePerPageColor]
+    [
+      pricePerPageBW,
+      pricePerPageColor,
+      daemonState.isOnline,
+      daemonState.selectedPrinter,
+      merchantName,
+    ]
   );
 
   const handleRevertJobEdits = useCallback(

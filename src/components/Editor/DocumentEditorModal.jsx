@@ -896,9 +896,67 @@ export default function DocumentEditorModal({
               gap: 1.5,
             }}
           >
-            <Typography variant="caption" fontWeight="bold" sx={{ color: 'grey.400', textTransform: 'uppercase' }}>
-              Pages ({selectedPagesSet.size}/{totalPages})
-            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Typography variant="caption" fontWeight="bold" sx={{ color: 'grey.300', textTransform: 'uppercase' }}>
+                Pages ({selectedPagesSet.size}/{totalPages})
+              </Typography>
+            </Box>
+
+            {/* Quick Multi-Page Selection Controls */}
+            <Stack direction="row" spacing={0.5} sx={{ mb: 0.5, flexWrap: 'wrap', gap: 0.5 }}>
+              <Button
+                size="small"
+                variant={selectedPagesSet.size === totalPages ? 'contained' : 'outlined'}
+                onClick={() => {
+                  const all = new Set(Array.from({ length: totalPages }, (_, i) => i + 1));
+                  setSelectedPagesSet(all);
+                  setPageSelectionMode('all');
+                  setCustomRangeText('all');
+                }}
+                sx={{ minWidth: 0, py: 0.2, px: 0.75, fontSize: '0.68rem', textTransform: 'none' }}
+              >
+                All
+              </Button>
+              <Button
+                size="small"
+                variant="outlined"
+                onClick={() => {
+                  const odd = new Set(Array.from({ length: totalPages }, (_, i) => i + 1).filter((p) => p % 2 === 1));
+                  setSelectedPagesSet(odd);
+                  setPageSelectionMode('odd');
+                  setCustomRangeText(formatSetToRange(odd, totalPages));
+                }}
+                sx={{ minWidth: 0, py: 0.2, px: 0.75, fontSize: '0.68rem', textTransform: 'none' }}
+              >
+                Odd
+              </Button>
+              <Button
+                size="small"
+                variant="outlined"
+                onClick={() => {
+                  const even = new Set(Array.from({ length: totalPages }, (_, i) => i + 1).filter((p) => p % 2 === 0));
+                  setSelectedPagesSet(even);
+                  setPageSelectionMode('even');
+                  setCustomRangeText(formatSetToRange(even, totalPages));
+                }}
+                sx={{ minWidth: 0, py: 0.2, px: 0.75, fontSize: '0.68rem', textTransform: 'none' }}
+              >
+                Even
+              </Button>
+              <Button
+                size="small"
+                variant="outlined"
+                onClick={() => {
+                  const reset = new Set([1]);
+                  setSelectedPagesSet(reset);
+                  setPageSelectionMode('custom');
+                  setCustomRangeText('1');
+                }}
+                sx={{ minWidth: 0, py: 0.2, px: 0.75, fontSize: '0.68rem', textTransform: 'none', color: 'grey.400' }}
+              >
+                Reset
+              </Button>
+            </Stack>
 
             {fileBlob && (
               <Document
@@ -915,32 +973,50 @@ export default function DocumentEditorModal({
                     return (
                       <Box
                         key={pageNum}
-                        onClick={() => handleJumpToPage(pageNum)}
+                        onClick={() => {
+                          handleTogglePageCheckbox(pageNum);
+                          handleJumpToPage(pageNum);
+                        }}
                         sx={{
                           position: 'relative',
                           cursor: 'pointer',
                           p: 0.75,
-                          borderRadius: 1.5,
+                          borderRadius: 2,
                           border: '2px solid',
-                          borderColor: isCurrent ? 'primary.main' : isSelected ? 'grey.700' : 'grey.900',
-                          bgcolor: isCurrent ? 'rgba(25, 118, 210, 0.15)' : '#1e2229',
+                          borderColor: isSelected ? 'primary.main' : isCurrent ? 'grey.600' : 'grey.800',
+                          bgcolor: isSelected ? 'rgba(25, 118, 210, 0.18)' : '#16191f',
                           opacity: isSelected ? 1 : 0.45,
                           transition: 'all 0.15s ease',
-                          '&:hover': { borderColor: 'primary.light' },
+                          '&:hover': {
+                            borderColor: isSelected ? 'primary.light' : 'grey.600',
+                            opacity: isSelected ? 1 : 0.75,
+                            transform: 'translateY(-1px)',
+                          },
                         }}
                       >
                         <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 0.5 }}>
-                          <Typography variant="caption" fontWeight="bold" sx={{ color: 'grey.300', fontSize: '0.75rem' }}>
+                          <Typography
+                            variant="caption"
+                            fontWeight="bold"
+                            sx={{ color: isSelected ? 'primary.light' : 'grey.400', fontSize: '0.75rem' }}
+                          >
                             P. {pageNum}
                           </Typography>
-                          <Checkbox
+                          <Chip
+                            label={isSelected ? 'Print' : 'Skip'}
                             size="small"
-                            checked={isSelected}
+                            color={isSelected ? 'primary' : 'default'}
                             onClick={(e) => {
                               e.stopPropagation();
                               handleTogglePageCheckbox(pageNum);
                             }}
-                            sx={{ p: 0, color: 'grey.500', '&.Mui-checked': { color: 'primary.main' } }}
+                            sx={{
+                              height: 18,
+                              fontSize: '0.62rem',
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              bgcolor: isSelected ? 'primary.main' : 'rgba(255,255,255,0.08)',
+                            }}
                           />
                         </Stack>
 
@@ -1081,6 +1157,7 @@ export default function DocumentEditorModal({
                                 id={`prepress-page-${pageNum}`}
                                 onClick={() => setCurrentPage(pageNum)}
                                 sx={{
+                                  position: 'relative',
                                   transform: `scale(${effectivePrintScale})`,
                                   transformOrigin: 'center center',
                                   transition: 'transform 0.15s ease',
@@ -1090,6 +1167,29 @@ export default function DocumentEditorModal({
                                   cursor: 'pointer',
                                 }}
                               >
+                                <Chip
+                                  label={`Page ${pageNum} • Click to Exclude`}
+                                  size="small"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleTogglePageCheckbox(pageNum);
+                                  }}
+                                  sx={{
+                                    position: 'absolute',
+                                    top: 6,
+                                    right: 6,
+                                    zIndex: 5,
+                                    fontSize: '0.62rem',
+                                    fontWeight: 700,
+                                    height: 20,
+                                    cursor: 'pointer',
+                                    opacity: 0.85,
+                                    bgcolor: 'primary.main',
+                                    color: 'white',
+                                    boxShadow: '0 2px 6px rgba(0,0,0,0.3)',
+                                    '&:hover': { opacity: 1, bgcolor: 'error.main' },
+                                  }}
+                                />
                                 <Page
                                   pageNumber={pageNum}
                                   width={
@@ -1631,7 +1731,11 @@ export default function DocumentEditorModal({
               boxShadow: '0 4px 14px rgba(25, 118, 210, 0.4)',
             }}
           >
-            {saving ? 'Processing Print...' : 'Print'}
+            {saving
+              ? 'Processing Print...'
+              : isPdf && selectedPagesSet.size < totalPages
+              ? `Print Selected (${selectedPagesSet.size} of ${totalPages} pgs)`
+              : `Print (${totalPages || 1} pgs)`}
           </Button>
         </Stack>
       </DialogActions>

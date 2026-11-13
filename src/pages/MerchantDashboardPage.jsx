@@ -21,6 +21,7 @@ import MerchantHistoryDrawer from '../components/MerchantView/MerchantHistoryDra
 import { StatsOverview } from '../components/MerchantView/QuickStatCard';
 import ProcessingDialog from '../components/MerchantView/ProcessingDialog';
 import ManualDuplexModal from '../components/MerchantView/ManualDuplexModal';
+import LocalFilePrintModal from '../components/MerchantView/LocalFilePrintModal';
 
 // Lazy-load heavy PDF Document Editor Modal (only loaded on demand when opened on desktop)
 const DocumentEditorModal = React.lazy(() => import('../components/Editor/DocumentEditorModal'));
@@ -35,6 +36,7 @@ import HistoryIcon from '@mui/icons-material/History';
 import SecurityIcon from '@mui/icons-material/Security';
 import BoltIcon from '@mui/icons-material/Bolt';
 import PrintIcon from '@mui/icons-material/Print';
+import UploadFileIcon from '@mui/icons-material/UploadFile';
 
 export default function MerchantDashboardPage() {
   const { user, userData, loading } = useAuth();
@@ -46,6 +48,7 @@ export default function MerchantDashboardPage() {
 
   const [historyOpen, setHistoryOpen] = useState(false);
   const [editingDoc, setEditingDoc] = useState(null); // { job, fileIndex }
+  const [localPrintModalOpen, setLocalPrintModalOpen] = useState(false);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'info' });
 
   // Guard merchant authentication & purge stale local blobs older than 24h
@@ -97,8 +100,6 @@ export default function MerchantDashboardPage() {
     handleSaveJobEdits,
     handleRevertJobEdits,
     daemonState,
-    refreshDaemonStatus,
-    selectPrinter,
   } = usePrintJobManager(merchantId, merchantName, pricePerPageBW, pricePerPageColor);
 
   // Optimistic tracking for instant queue removal upon Done / Delete
@@ -272,6 +273,22 @@ export default function MerchantDashboardPage() {
 
         <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center' }}>
           <Button
+            variant="contained"
+            color="primary"
+            size="small"
+            startIcon={<UploadFileIcon />}
+            onClick={() => setLocalPrintModalOpen(true)}
+            sx={{
+              textTransform: 'none',
+              fontWeight: 700,
+              borderRadius: 2,
+              px: 1.75,
+              boxShadow: '0 2px 8px rgba(25, 118, 210, 0.25)',
+            }}
+          >
+            Print File
+          </Button>
+          <Button
             variant="outlined"
             size="small"
             startIcon={<HistoryIcon />}
@@ -347,6 +364,20 @@ export default function MerchantDashboardPage() {
         open={Boolean(processingJobId)}
         printProgress={printProgress}
         onCancel={cancelProcessing}
+      />
+
+
+      {/* Local Machine File Print Modal */}
+      <LocalFilePrintModal
+        open={localPrintModalOpen}
+        onClose={() => setLocalPrintModalOpen(false)}
+        merchantId={merchantId}
+        merchantName={merchantName}
+        pricePerPageBW={pricePerPageBW}
+        pricePerPageColor={pricePerPageColor}
+        onPrintJob={handlePrint}
+        onEditDoc={(job, fileIndex = 0) => setEditingDoc({ job, fileIndex })}
+        onJobCreated={() => refreshJobs?.()}
       />
 
       {/* Manual Duplex Paper Reload Modal (Canon G3030 / G3730 single-sided support) */}

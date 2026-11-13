@@ -146,7 +146,9 @@ function resolvePrintTarget(existingWindow) {
       if (mobileWin) {
         return { targetWin: mobileWin, targetDoc: mobileWin.document, iframeElem: null };
       }
-    } catch (_e) {}
+    } catch (_e) {
+      // Popups may be blocked on mobile browsers
+    }
   }
   const iframeElem = createPrintIframe();
   return { targetWin: iframeElem.contentWindow, targetDoc: iframeElem.contentWindow.document, iframeElem };
@@ -180,7 +182,9 @@ function monitorPrintCompletion({ targetWin, blobUrls, printId, iframeElem, reso
     urlList.forEach((u) => {
       try {
         URL.revokeObjectURL(u);
-      } catch (_err) {}
+      } catch (_err) {
+        // Ignore blob revocation errors
+      }
     });
     if (iframeElem && iframeElem.parentNode) {
       iframeElem.parentNode.removeChild(iframeElem);
@@ -498,6 +502,7 @@ export async function securePrintPDF(fileBlob, fileName, specs, merchantName, ex
             image-rendering: -webkit-optimize-contrast;
             image-rendering: crisp-edges;
             image-rendering: high-quality;
+            ${!isColor ? 'filter: grayscale(100%);' : ''}
           }
         </style>
       </head>

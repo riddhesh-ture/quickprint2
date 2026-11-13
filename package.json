@@ -52,6 +52,7 @@
   "build": {
     "appId": "com.quickprint.merchant",
     "productName": "QuickPrint",
+    "npmRebuild": false,
     "directories": {
       "output": "release"
     },
